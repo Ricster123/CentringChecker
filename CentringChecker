@@ -1,0 +1,1651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Card Centering Tool v7.3.17</title>
+<style>
+  :root{
+    --bg: #0b0f14;
+    --panel: rgba(255,255,255,0.04);
+    --panel2: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.10);
+    --text: rgba(255,255,255,0.92);
+    --muted: rgba(255,255,255,0.65);
+    --shadow: 0 18px 50px rgba(0,0,0,0.45);
+    --accent: #31c7ff;
+    --accent2: rgba(49,199,255,0.18);
+    --danger: #ff6b6b;
+    --warn: #ffce5c;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg: #f6f7fb;
+      --panel: rgba(0,0,0,0.04);
+      --panel2: rgba(0,0,0,0.06);
+      --border: rgba(0,0,0,0.10);
+      --text: rgba(0,0,0,0.88);
+      --muted: rgba(0,0,0,0.55);
+      --shadow: 0 18px 50px rgba(0,0,0,0.16);
+      --accent: #0079ff;
+      --accent2: rgba(0,121,255,0.14);
+      --danger: #d63447;
+      --warn: #b07700;
+    }
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{height:100%; touch-action:none;}
+
+  body{ height:100%; }
+  html,body{ touch-action: none; }
+
+  body{
+    margin:0;
+    background: radial-gradient(1200px 700px at 20% 0%, var(--accent2), transparent 60%) , var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    overflow:hidden;
+  }
+
+  .app{
+    height:100%;
+    display:grid;
+    grid-template-rows: 56px 1fr;
+  }
+
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    font-weight:900; letter-spacing:0.3px;
+  }
+  .dot{
+    width:10px; height:10px; border-radius:50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 6px var(--accent2);
+  }
+  .top-actions{ display:flex; gap:10px; align-items:center; }
+  .pill{
+    font-size:12px;
+    padding:6px 10px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+  }
+
+  .btn{
+    border:1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    padding:8px 12px;
+    border-radius:12px;
+    font-weight:750;
+    cursor:pointer;
+    transition: transform .06s ease, background .15s ease;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.18);
+  }
+  .btn:hover{ background: var(--panel2); }
+  .btn:active{ transform: translateY(1px); }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+  .btn.primary{ border-color: transparent; background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06)); }
+  .btn.accent{ border-color: rgba(255,255,255,0.0); background: linear-gradient(180deg, rgba(49,199,255,0.35), rgba(49,199,255,0.15)); }
+  .btn.danger{ background: linear-gradient(180deg, rgba(255,107,107,0.25), rgba(255,107,107,0.10)); border-color: rgba(255,107,107,0.25); }
+  .btn.ghost{ background: transparent; box-shadow:none; }
+
+  .content{
+    display:grid;
+    grid-template-columns: 320px 1fr 360px;
+    gap:14px;
+    padding: 14px;
+    min-height:0;
+  }
+
+  .panel{
+    background: var(--panel);
+    border:1px solid var(--border);
+    border-radius:18px;
+    box-shadow: var(--shadow);
+    min-height:0;
+    overflow:hidden;
+  }
+  .panel-inner{
+    padding:14px;
+    height:100%;
+    overflow:auto;
+  }
+  .section-title{
+    font-size:12px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color: var(--muted);
+    font-weight:900;
+    margin: 6px 0 10px 0;
+  }
+  .card{
+    background: rgba(255,255,255,0.03);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:12px;
+  }
+
+  .card.active-measure{
+    background: rgba(49,199,255,0.10);
+    border-color: rgba(49,199,255,0.38);
+  }
+  .card.active-geom{
+    background: rgba(255,206,92,0.12);
+    border-color: rgba(255,206,92,0.40);
+  }
+
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .col{ display:flex; flex-direction:column; gap:10px; }
+
+  select{
+    width:100%;
+    border-radius:12px;
+    padding:10px 12px;
+    background: rgba(0,0,0,0.10);
+    border:1px solid var(--border);
+    color: var(--text);
+    font-weight:800;
+    outline:none;
+  }
+  @media (prefers-color-scheme: light){
+    select{ background: rgba(255,255,255,0.65); }
+  }
+  .hint{
+    font-size:12px;
+    color: var(--muted);
+    line-height:1.35;
+  }
+  .status{
+    white-space:pre-line;
+    font-size:13px;
+    line-height:1.35;
+    color: var(--text);
+  }
+  .k{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:2px 8px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    font-weight:900;
+    font-size:12px;
+    margin:0 4px;
+  }
+
+  .canvas-wrap{
+    cursor: crosshair;
+    position:relative;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    border-radius:18px;
+    background: rgba(0,0,0,0.15);
+    border:1px solid var(--border);
+    box-shadow: var(--shadow);
+    touch-action: none; /* we handle pinch/pan ourselves */
+  }
+  canvas{
+    position:absolute;
+    left:0; top:0;
+    width:100%;
+    height:100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  .toast{
+    position:absolute;
+    left:12px;
+    bottom:12px;
+    padding:10px 12px;
+    border-radius:14px;
+    background: rgba(0,0,0,0.50);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: rgba(255,255,255,0.92);
+    font-weight:750;
+    font-size:12px;
+    box-shadow: 0 16px 45px rgba(0,0,0,0.35);
+    max-width: 70%;
+    display:none;
+  }
+  @media (prefers-color-scheme: light){
+    .toast{
+      background: rgba(255,255,255,0.78);
+      color: rgba(0,0,0,0.85);
+      border-color: rgba(0,0,0,0.12);
+    }
+  }
+
+  .metric{
+    display:grid;
+    grid-template-columns: 1fr auto;
+    gap:8px 12px;
+    align-items:baseline;
+    padding:12px;
+    border-radius:16px;
+    border:1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+  }
+  .metric .label{ color: var(--muted); font-weight:850; font-size:12px; letter-spacing:0.08em; text-transform:uppercase; }
+  .metric .val{ font-weight:950; font-size:18px; }
+  .metric .sub{ grid-column:1 / -1; font-size:12px; color: var(--muted); white-space:pre-line; }
+
+  .divider{ height:1px; background: var(--border); margin: 10px 0; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span> Card Centering Tool </div>
+    <div class="top-actions">
+
+      <div class="row" id="sideTabs" style="gap:6px;">
+        <button class="btn ghost" id="tabFront" data-side="front">Front</button>
+        <button class="btn ghost" id="tabBack" data-side="back">Back</button>
+      </div>
+
+      <span class="pill" id="zoomPill">100%</span>
+      <button class="btn" id="uploadBtn">Upload</button>
+      <button class="btn" id="resetBtn" disabled>Reset</button>
+      <button class="btn accent" id="exportBtn" disabled>Export PDF</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- Left panel -->
+    <div class="panel">
+      <div class="panel-inner col">
+        <div>
+          <div class="section-title">Workflow</div>
+          <div class="card">
+            <div class="hint">
+              Zoom: pinch (touch) or mouse wheel.<br/>
+              Pan: two-finger drag (touch) or <b>middle mouse</b> drag.<br/>
+              Measure: click the borders as guided by the status.
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">Geometry correction</div>
+          <div class="card col" id="geomCard">
+            <select id="geomMode" disabled>
+              <option value="none">None</option>
+              <option value="rotate">Rotate only</option>
+              <option value="persp">Perspective (Pokémon 63×88)</option>
+            </select>
+            <div class="hint" id="geomHint">Load an image to begin.</div>
+            <div class="row">
+              <button class="btn primary" id="geomStart" disabled>Start</button>
+              <button class="btn" id="geomApply" disabled>Apply</button>
+              <button class="btn ghost" id="geomCancel" disabled>Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">Measure centring</div>
+          <div class="card col" id="measureCard">
+            <div class="row">
+              <button class="btn primary" id="measureLR" disabled>Left / Right</button>
+              <button class="btn primary" id="measureTB" disabled>Top / Bottom</button>
+              <button class="btn danger" id="clearMarks" disabled>Clear selected</button>
+              <button class="btn" id="clearMarksAll" disabled>Clear all</button>
+            </div>
+            <div class="hint">
+              LR: L1 outer, L2 inner, R1 inner, R2 outer.<br/>
+              TB: T1 outer, T2 inner, B1 inner, B2 outer.
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">Status</div>
+          <div class="card status" id="status">Load an image.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-wrap" id="wrap">
+      <canvas id="view"></canvas>
+      <div class="toast" id="toast"></div>
+    </div>
+
+    <!-- Right panel -->
+    <div class="panel">
+      <div class="panel-inner col">
+        <div class="section-title">Results</div>
+        <div class="metric">
+          <div class="label">Left / Right</div><div class="val" id="lrPct">–</div>
+          <div class="sub" id="lrInfo">Not measured.</div>
+        </div>
+        <div class="metric">
+          <div class="label">Top / Bottom</div><div class="val" id="tbPct">–</div>
+          <div class="sub" id="tbInfo">Not measured.</div>
+        </div>
+        <div class="metric">
+          <div class="label">Notes</div><div class="val"> </div>
+          <div class="sub" id="notes">
+            Pokémon aspect ratio: 63×88 mm (H/W ≈ 1.3968)<br/>
+            Export PDF includes: annotated image, pixel counts, and centring %.<br/>
+            Tip: phone photos look best at 2× zoom from a bit further back.
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="hint">
+          Keyboard: <span class="k">U</span> undo, <span class="k">R</span> clear current axis
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+
+  // --- Hoisted geometry DOM refs (ordering fix) ---
+// Pokémon TCG standard size: 63 mm × 88 mm (2.5" × 3.5")
+  const POKEMON_CARD_W = 63;
+  const POKEMON_CARD_H = 88;
+  const POKEMON_AR = POKEMON_CARD_H / POKEMON_CARD_W; // ~1.396825
+
+  const wrap = document.getElementById("wrap");
+  const canvas = document.getElementById("view");
+  const ctx = canvas.getContext("2d");
+
+  const uploadBtn = document.getElementById("uploadBtn");
+  const geomModeSel = document.getElementById("geomMode");
+  const geomHint = document.getElementById("geomHint");
+  const geomCard = document.getElementById("geomCard");
+  const measureCard = document.getElementById("measureCard");
+  const geomStart = document.getElementById("geomStart");
+  const geomApply = document.getElementById("geomApply");
+  const geomCancel = document.getElementById("geomCancel");
+
+  const resetBtn = document.getElementById("resetBtn");
+  const exportBtn = document.getElementById("exportBtn");
+  const zoomPill = document.getElementById("zoomPill");
+const measureLR = document.getElementById("measureLR");
+  const measureTB = document.getElementById("measureTB");
+  const clearMarks = document.getElementById("clearMarks");
+  const clearMarksAll = document.getElementById("clearMarksAll");
+  const statusEl = document.getElementById("status");
+
+  const lrPct = document.getElementById("lrPct");
+  const tbPct = document.getElementById("tbPct");
+  const lrInfo = document.getElementById("lrInfo");
+  const tbInfo = document.getElementById("tbInfo");
+
+  const toast = document.getElementById("toast");
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "image/*";
+
+  // Offscreen canvas holds the current transformed image pixels
+  let baseCanvas = null;     // original loaded image
+  let currentCanvas = null;  // transformed
+  let imgW = 0, imgH = 0;
+
+  // View transform (screen = pan + zoom * image)
+  let zoom = 1.0;
+  let panX = 0;
+  let panY = 0;
+
+  // Modes
+  let activeAxis = "lr"; // lr or tb
+
+
+  // ===== Active side (Front/Back) and per-side image/view state =====
+  let activeSide = "front";
+
+// ===== STEP 1: Front / Back tabs (UI only, no behaviour change) =====
+
+  // ===== STEP 2: Per-side image/view state (Front / Back) =====
+  const sides = {
+    front: {
+      baseCanvas: null,
+      currentCanvas: null,
+      imgW: 0, imgH: 0,
+      zoom: 1, panX: 0, panY: 0
+    },
+    back: {
+      baseCanvas: null,
+      currentCanvas: null,
+      imgW: 0, imgH: 0,
+      zoom: 1, panX: 0, panY: 0
+    }
+  };
+
+  function saveActiveSide(){
+    const s = sides[activeSide];
+    s.baseCanvas = baseCanvas;
+    s.currentCanvas = currentCanvas;
+    s.imgW = imgW; s.imgH = imgH;
+    s.zoom = zoom; s.panX = panX; s.panY = panY;
+  }
+
+  function loadActiveSide(){
+    const s = sides[activeSide];
+    baseCanvas = s.baseCanvas;
+    currentCanvas = s.currentCanvas;
+    imgW = s.imgW; imgH = s.imgH;
+    zoom = s.zoom || 1;
+    panX = s.panX || 0;
+    panY = s.panY || 0;
+    resize();
+    updateResults();
+    syncUI();
+    draw();
+  }
+  const tabFront = document.getElementById("tabFront");
+  const tabBack  = document.getElementById("tabBack");
+
+  function syncSideTabs(){
+    tabFront.style.borderColor = activeSide === "front" ? "rgba(49,199,255,0.8)" : "";
+    tabBack.style.borderColor  = activeSide === "back"  ? "rgba(49,199,255,0.8)" : "";
+  }
+
+  tabFront.addEventListener("click", ()=>{
+    saveActiveSide();
+    activeSide = "front";
+    loadActiveSide();
+    syncSideTabs();
+  updateResults();
+    setToast("Front side selected");
+  });
+
+  tabBack.addEventListener("click", ()=>{
+    saveActiveSide();
+    activeSide = "back";
+    loadActiveSide();
+    syncSideTabs();
+  updateResults();
+    setToast("Back side selected");
+  });
+
+
+  
+  // ===== STEP 3: Per-side measurement state =====
+  const measureSides = {
+    front: {
+      lr: { pts: [], result: null },
+      tb: { pts: [], result: null }
+    },
+    back: {
+      lr: { pts: [], result: null },
+      tb: { pts: [], result: null }
+    }
+  };
+
+  function MS(){
+    return measureSides[activeSide];
+  }
+
+  // Initialise side tabs and state once measurement state exists
+  syncSideTabs();
+  loadActiveSide();
+
+  
+
+  // Geometry correction capture
+  let geomMode = "none"; // none | rotate | persp
+  let geomCapturing = false;
+
+  // Rotate: 1 short line (2 clicks)
+  let rotPts = []; // [{x,y},{x,y}]
+
+  // Perspective: 4 lines (top,right,bottom,left), 2 clicks each
+  let perspLines = []; // [{a,b}] length 0..4
+  let perspTemp = null; // first click of current line
+
+  // Pointer handling for pinch/pan
+  const pointers = new Map(); // id -> {x,y,type,buttons}
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  let pinchStartPanX = 0;
+  let pinchStartPanY = 0;
+  let pinchStartCenter = {x:0,y:0};
+  let isMiddlePanning = false;
+  let hoverImgPt = null;
+  let pointerImgPt = null;
+  let hoverPixel = null; // {x:int,y:int} pixel cell that would be selected if clicked
+  let middlePanStart = {x:0,y:0, panX:0, panY:0};
+
+  function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
+  function fmt1(n){ return Number(n).toFixed(1); }
+
+  function setToast(msg, ms=4500){
+    toast.textContent = msg;
+    toast.style.display = "block";
+    clearTimeout(setToast._t);
+    setToast._t = setTimeout(()=> toast.style.display="none", ms);
+  }
+
+  window.addEventListener("error", (ev)=>{
+    try{
+      const where = (ev.filename ? (" @ " + ev.filename.split("/").pop()) : "") + (ev.lineno ? (":" + ev.lineno) : "");
+      setToast("JS error: " + (ev.message || "unknown") + where, 12000);
+    }catch(_){ }
+  });
+
+  function resize(){
+    const r = wrap.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(r.width * devicePixelRatio));
+    canvas.height = Math.max(1, Math.floor(r.height * devicePixelRatio));
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    draw();
+  }
+  window.addEventListener("resize", resize);
+  // Keep canvas perfectly in sync if layout changes (e.g., sidebar text reflow)
+  const ro = new ResizeObserver(() => resize());
+  ro.observe(wrap);
+
+  // iOS Safari: prevent page pinch-zoom/gesture zoom so our pinch-to-zoom works inside the canvas.
+  // Must be registered once, not inside draw loops.
+  document.addEventListener("gesturestart", (e)=> e.preventDefault(), { passive:false });
+  document.addEventListener("gesturechange", (e)=> e.preventDefault(), { passive:false });
+  document.addEventListener("gestureend", (e)=> e.preventDefault(), { passive:false });
+
+
+  function imgToScreen(p){
+    return { x: panX + p.x * zoom, y: panY + p.y * zoom };
+  }
+  function screenToImg(sx, sy){
+    const x = (sx - panX) / zoom;
+    const y = (sy - panY) / zoom;
+    return { x, y, inBounds: (x>=0 && x<=imgW && y>=0 && y<=imgH) };
+  }
+
+
+  function projectAlongAxis(anchor, target, axis){
+    // axis 'lr' => horizontal line (lock Y); 'tb' => vertical line (lock X)
+    if (axis === "lr") return { x: target.x, y: anchor.y };
+    return { x: anchor.x, y: target.y };
+  }
+
+
+  function drawFullImageGuide(anchor, axis, colour){
+    // Draw a dashed guide across the FULL image extent, in image space.
+    // LR => y fixed, x from 0..imgW; TB => x fixed, y from 0..imgH.
+    const dash = [14, 10];
+    if (axis === "lr"){
+      const A = imgToScreen({x:0, y:anchor.y});
+      const B = imgToScreen({x:imgW, y:anchor.y});
+      drawLine(A,B, colour, 2.2, dash);
+    } else {
+      const A = imgToScreen({x:anchor.x, y:0});
+      const B = imgToScreen({x:anchor.x, y:imgH});
+      drawLine(A,B, colour, 2.2, dash);
+    }
+  }
+
+  function projectToAxis(anchor0, target, axis){
+    // Locks to the axis defined by the FIRST click for that measurement set.
+    if (axis === "lr") return { x: target.x, y: anchor0.y };
+    return { x: anchor0.x, y: target.y };
+  }
+  function centreImage(){
+    const r = wrap.getBoundingClientRect();
+    if (!imgW || !imgH) return;
+    const maxW = r.width, maxH = r.height;
+    const fit = Math.min(maxW / imgW, maxH / imgH);
+    zoom = clamp(fit, 0.10, 8.0);
+    panX = (maxW - imgW*zoom)/2;
+    panY = (maxH - imgH*zoom)/2;
+    updateZoomPill();
+  }
+  function updateZoomPill(){
+    zoomPill.textContent = `${Math.round(zoom*100)}%`;
+  }
+
+  function syncUI(){
+    const loaded = !!currentCanvas;
+    resetBtn.disabled = !loaded;
+    exportBtn.disabled = !(
+  sides.front.currentCanvas && sides.back.currentCanvas &&
+  measureSides.front.lr.result && measureSides.front.tb.result &&
+  measureSides.back.lr.result && measureSides.back.tb.result
+);
+    geomModeSel.disabled = !loaded;
+    geomStart.disabled = !loaded || geomMode === "none";
+    geomApply.disabled = !loaded || !geomCapturing || ((geomMode === "rotate") ? (rotPts.length!==2) : (perspLines.length!==4 || !!perspTemp));
+    geomCancel.disabled = !loaded || !geomCapturing;
+
+    measureLR.disabled = !loaded || geomCapturing;
+    measureTB.disabled = !loaded || geomCapturing;
+    clearMarks.disabled = !loaded;
+    clearMarksAll.disabled = !loaded;
+
+    // Active section highlighting
+    if (geomCard) geomCard.classList.toggle("active-geom", !!loaded && geomCapturing);
+    if (measureCard) measureCard.classList.toggle("active-measure", !!loaded && !geomCapturing && (MS().lr.pts.length<4 || MS().tb.pts.length<4));
+
+    // Highlight current axis
+    measureLR.style.borderColor = (activeAxis==="lr") ? "rgba(49,199,255,0.7)" : "";
+    measureTB.style.borderColor = (activeAxis==="tb") ? "rgba(49,199,255,0.7)" : "";
+
+    if (!loaded){
+      geomHint.textContent = "Load an image to begin.";
+    } else {
+      if (geomMode === "none"){
+        geomHint.textContent = "No correction. Measure directly.";
+      } else if (geomMode === "rotate"){
+        geomHint.innerHTML = "Rotate only: draw a short line along a border to straighten the image. <br/>2 clicks total.";
+      } else {
+        geomHint.innerHTML = "Perspective (Pokémon 63×88): draw 4 short lines on the borders in order Top, Right, Bottom, Left. <br/>8 clicks total.";
+      }
+    }
+
+    updateStatus();
+  }
+
+  function updateStatus(){
+    if (!MS) return;
+    if (!currentCanvas){
+      statusEl.textContent = "Load an image.";
+      return;
+    }
+    if (geomCapturing){
+      if (geomMode === "rotate"){
+        const next = (rotPts.length===0) ? "Rot1" : (rotPts.length===1) ? "Rot2" : "Apply";
+        statusEl.textContent = `Geometry: Rotate\nNext: ${next}\n\nTip: draw along a border.`;
+      } else if (geomMode === "persp"){
+        const names = ["Top","Right","Bottom","Left"];
+        const i = perspLines.length;
+        if (i>=4 && !perspTemp){
+          statusEl.textContent = "Geometry: Perspective\nAll 4 lines captured.\nPress Apply.";
+        } else {
+          const step = perspTemp ? "2nd click" : "1st click";
+          statusEl.textContent = `Geometry: Perspective\nNext: ${names[i]} line (${step})\nProgress: ${perspLines.length}/4 lines`;
+        }
+      }
+      return;
+    }
+
+    const lrDone = MS().lr.pts.length===4;
+    const tbDone = MS().tb.pts.length===4;
+    const bothDone = lrDone && tbDone;
+
+    const nextLabel = (() => {
+      const pts = MS()[activeAxis].pts;
+      if (activeAxis==="lr"){
+        const labels=["L1 (outer left)","L2 (inner left)","R1 (inner right)","R2 (outer right)"];
+        return labels[pts.length] || "LR complete";
+      } else {
+        const labels=["T1 (outer top)","T2 (inner top)","B1 (inner bottom)","B2 (outer bottom)"];
+        return labels[pts.length] || "TB complete";
+      }
+    })();
+
+    statusEl.textContent =
+`Measuring: ${activeAxis==="lr" ? "Left / Right" : "Top / Bottom"}
+Next: ${nextLabel}
+Progress: LR ${MS().lr.pts.length}/4, TB ${MS().tb.pts.length}/4
+${bothDone ? "\nReady to export PDF." : ""}`;
+  }
+
+  function drawLine(a,b, color, width=3, dash=null){
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    if (dash) ctx.setLineDash(dash);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = dash ? 4 : 10;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawLabel(imgPt, text, color){
+    const p = imgToScreen(imgPt);
+    ctx.save();
+    ctx.font = "900 12px ui-sans-serif, system-ui";
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillText(text, p.x+1, p.y+13);
+    ctx.fillStyle = color;
+    ctx.fillText(text, p.x, p.y+12);
+    ctx.restore();
+  }
+
+  function draw(){
+    try {
+    const r = wrap.getBoundingClientRect();
+    ctx.clearRect(0,0,r.width,r.height);
+
+    // background grid
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    const step = 28;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+    ctx.lineWidth = 1;
+    for (let x=0; x<r.width; x+=step){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,r.height); ctx.stroke();
+    }
+    for (let y=0; y<r.height; y+=step){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(r.width,y); ctx.stroke();
+    }
+    ctx.restore();
+
+    if (!currentCanvas) return;
+
+    // draw image
+    ctx.save();
+    ctx.translate(panX, panY);
+    ctx.scale(zoom, zoom);
+    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingQuality = "low";
+    ctx.drawImage(currentCanvas, 0, 0);
+    ctx.restore();
+
+    // Pixel hover highlight (only really visible when zoomed in)
+    // Show the *exact pixel cell* that would be selected if the user clicked right now.
+    hoverPixel = null;
+    if (pointerImgPt && currentCanvas){
+      // Work out the candidate point that would be stored on click
+      let cand = pointerImgPt;
+
+      if (!geomCapturing){
+        const pts = MS()[activeAxis].pts;
+        if (pts && pts.length >= 1){
+          cand = projectToAxis(pts[0], pointerImgPt, activeAxis);
+        }
+      }
+
+      const px = Math.floor(cand.x);
+      const py = Math.floor(cand.y);
+      if (px >= 0 && py >= 0 && px < currentCanvas.width && py < currentCanvas.height){
+        hoverPixel = { x:px, y:py };
+        const sx = panX + px * zoom;
+        const sy = panY + py * zoom;
+        const sz = zoom;
+
+        ctx.save();
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        // subtle fill
+        ctx.fillStyle = "rgba(49,199,255,0.18)";
+        ctx.fillRect(sx, sy, sz, sz);
+        // crisp outline
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.strokeRect(sx + 0.5, sy + 0.5, sz - 1, sz - 1);
+        ctx.restore();
+      }
+    }
+
+    // overlays (in screen coords)
+    const colors = {
+      solid: "rgba(49,199,255,1)",
+      solidTB: "rgba(255,165,0,1)",
+      guide: "rgba(130,230,255,0.9)",
+      guideTB: "rgba(255,165,0,0.9)",
+      geom: "rgba(255,206,92,1)",
+      geomGuide: "rgba(255,206,92,0.9)"
+    };
+
+    // Geometry overlays
+    if (geomCapturing){
+      if (geomMode === "rotate"){
+        for (let i=0;i<rotPts.length;i++){
+          drawLabel(rotPts[i], `Rot${i+1}`, colors.geom);
+        }
+        if (rotPts.length===1 && pointerImgPt){
+          // dashed preview to pointer
+          drawLine(imgToScreen(rotPts[0]), imgToScreen(pointerImgPt), colors.geomGuide, 3, [14,10]);
+        }
+        if (rotPts.length===2){
+          drawLine(imgToScreen(rotPts[0]), imgToScreen(rotPts[1]), colors.geom, 4, null);
+        }
+      } else if (geomMode === "persp"){
+        const names=["Top","Right","Bottom","Left"];
+        for (let i=0;i<perspLines.length;i++){
+          const L = perspLines[i];
+          drawLine(imgToScreen(L.a), imgToScreen(L.b), colors.geom, 4, null);
+          drawLabel(L.a, names[i]+"1", colors.geom);
+          drawLabel(L.b, names[i]+"2", colors.geom);
+        }
+        if (perspTemp){
+          drawLabel(perspTemp, names[perspLines.length]+"1", colors.geom);
+          if (pointerImgPt){
+            drawLine(imgToScreen(perspTemp), imgToScreen(pointerImgPt), colors.geomGuide, 3, [14,10]);
+          }
+        }
+      }
+    }
+
+    // Measurement overlays
+    const bothDone = MS().lr.pts.length===4 && MS().tb.pts.length===4;
+    const showGuides = !bothDone; // hide dashed guides when both complete
+
+    // Locked guide previews (v6.2-style, fixed)
+    // - Guide is defined by the FIRST click on each axis, and persists until that axis is complete.
+    // - All subsequent clicks are snapped to that axis (prevents offset).
+    // - Rubber-band preview follows the dashed guide.
+    if (!geomCapturing) {
+      // LR axis
+      if (showGuides && MS().lr.pts.length >= 1 && MS().lr.pts.length < 4) {
+        drawFullImageGuide(MS().lr.pts[0], "lr", colors.guide);
+      }
+      // TB axis
+      if (showGuides && MS().tb.pts.length >= 1 && MS().tb.pts.length < 4) {
+        drawFullImageGuide(MS().tb.pts[0], "tb", colors.guideTB);
+      }
+
+      const pts = MS()[activeAxis].pts;
+// Rubber-banding behaviour for border measurement:
+      // - Show preview after click 1 (outer) until click 2 (inner) is placed
+      // - Stop preview between clicks 2 -> 3
+      // - Show preview again after click 3 (inner) until click 4 (outer) is placed
+      const rubberBandAllowed = (pts.length === 1 || pts.length === 3);
+
+      if (pointerImgPt && rubberBandAllowed) {
+        const a0 = pts[0];
+        const last = pts[pts.length - 1];
+        const proj = projectToAxis(a0, pointerImgPt, activeAxis);
+        // dashed preview aligned to guide + solid fill
+        drawLine(imgToScreen(last), imgToScreen(proj), (activeAxis==="tb" ? (colors.guideTB||colors.guide) : colors.guide), 2.8, [14,10]);
+        drawLine(imgToScreen(last), imgToScreen(proj), (activeAxis==="tb" ? (colors.solidTB||colors.solid) : colors.solid), 4, null);
+      }
+    }
+
+for (const key of ["lr","tb"]){
+      const pts = MS()[key].pts;
+      if (!pts.length) continue;
+      const labels = (key==="lr") ? ["L1","L2","R1","R2"] : ["T1","T2","B1","B2"];
+      const axisSolid = (key==="tb") ? (colors.solidTB||colors.solid) : colors.solid;
+      const axisGuide = (key==="tb") ? (colors.guideTB||colors.guide) : colors.guide;
+      pts.forEach((p,i)=> drawLabel(p, labels[i], axisSolid));
+
+      if (pts.length>=2){
+        const A = imgToScreen(pts[0]);
+        const B = imgToScreen(pts[1]);
+        drawLine(A,B, axisSolid, 4, null);
+        if (showGuides) drawLine(A,B, axisGuide, 2.2, [14,10]);
+      }
+      if (pts.length>=4){
+        const A = imgToScreen(pts[2]);
+        const B = imgToScreen(pts[3]);
+        drawLine(A,B, axisSolid, 4, null);
+        if (showGuides) drawLine(A,B, axisGuide, 2.2, [14,10]);
+      }
+    }
+    } catch (err) {
+      try { setToast("Draw error: " + (err && err.message ? err.message : err), 12000); } catch(_){ }
+    }
+
+  }
+
+  function clearAxis(axis){
+    MS()[axis].pts = [];
+    MS()[axis].result = null;
+    updateResults();
+    syncUI();
+    draw();
+  }
+  function clearAll(){
+    clearAxis("lr");
+    clearAxis("tb");
+  }
+
+  function computeAxis(axis){
+    const pts = MS()[axis].pts;
+    if (pts.length !== 4) return null;
+
+    // Determine outer/inner pairs by click order as instructed
+    // LR: L1 outer left, L2 inner left -> left thickness = |x2-x1|
+    //     R1 inner right, R2 outer right -> right thickness = |x4-x3|
+    // TB: T1 outer top, T2 inner top -> top thickness = |y2-y1|
+    //     B1 inner bottom, B2 outer bottom -> bottom thickness = |y4-y3|
+    let aThickness, bThickness;
+    if (axis === "lr"){
+      aThickness = Math.abs(pts[1].x - pts[0].x);
+      bThickness = Math.abs(pts[3].x - pts[2].x);
+    } else {
+      aThickness = Math.abs(pts[1].y - pts[0].y);
+      bThickness = Math.abs(pts[3].y - pts[2].y);
+    }
+
+    const total = aThickness + bThickness;
+    if (total <= 0.00001) return { ok:false, msg:"Zero thickness" };
+
+    const big = Math.max(aThickness, bThickness) / total * 100;
+    const small = 100 - big;
+
+    // Determine which side is bigger
+    let bigSide = "";
+    if (axis === "lr"){
+      bigSide = (aThickness >= bThickness) ? "Left" : "Right";
+    } else {
+      bigSide = (aThickness >= bThickness) ? "Top" : "Bottom";
+    }
+
+    return {
+      ok:true,
+      a: aThickness,
+      b: bThickness,
+      big, small,
+      bigSide,
+      text:
+        `${axis.toUpperCase()} border A: ${Math.round(aThickness)} px (raw ${fmt1(aThickness)})\n` +
+        `${axis.toUpperCase()} border B: ${Math.round(bThickness)} px (raw ${fmt1(bThickness)})\n` +
+        `Split: ${Math.round(big)}/${Math.round(small)} (${bigSide} heavier)`
+    };
+  }
+
+  function updateResults(){
+    const lr = MS().lr.result;
+    const tb = MS().tb.result;
+
+    if (lr && lr.ok){
+      lrPct.textContent = `${Math.round(lr.big)}/${Math.round(lr.small)}`;
+      lrInfo.textContent = lr.text.replaceAll("LR", "Left/Right");
+    } else {
+      lrPct.textContent = "–";
+      lrInfo.textContent = "Not measured.";
+    }
+
+    if (tb && tb.ok){
+      tbPct.textContent = `${Math.round(tb.big)}/${Math.round(tb.small)}`;
+      tbInfo.textContent = tb.text.replaceAll("TB", "Top/Bottom");
+    } else {
+      tbPct.textContent = "–";
+      tbInfo.textContent = "Not measured.";
+    }
+  }
+
+  function finishAxisIfReady(axis){
+    if (MS()[axis].pts.length === 4){
+      MS()[axis].result = computeAxis(axis);
+      updateResults();
+      // Auto switch to the other axis if not done
+      const other = (axis==="lr") ? "tb" : "lr";
+      if (MS()[other].pts.length < 4) activeAxis = other;
+      syncUI();
+      draw();
+    }
+  }
+
+  // ---------- Geometry math for perspective ----------
+  function lineIntersection(L1, L2){
+    const x1=L1.a.x, y1=L1.a.y, x2=L1.b.x, y2=L1.b.y;
+    const x3=L2.a.x, y3=L2.a.y, x4=L2.b.x, y4=L2.b.y;
+    const den = (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4);
+    if (Math.abs(den) < 1e-9) return null;
+    const px = ((x1*y2 - y1*x2)*(x3-x4) - (x1-x2)*(x3*y4 - y3*x4)) / den;
+    const py = ((x1*y2 - y1*x2)*(y3-y4) - (y1-y2)*(x3*y4 - y3*x4)) / den;
+    return {x:px, y:py};
+  }
+
+  function solveLinear(A, b){
+    const n = A.length;
+    const M = A.map((row,i)=>row.slice().concat([b[i]]));
+    for (let col=0; col<n; col++){
+      let pivot = col;
+      for (let r=col+1;r<n;r++){
+        if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+      }
+      if (Math.abs(M[pivot][col]) < 1e-12) return null;
+      if (pivot !== col){ const tmp=M[col]; M[col]=M[pivot]; M[pivot]=tmp; }
+      const div = M[col][col];
+      for (let c=col; c<=n; c++) M[col][c] /= div;
+      for (let r=0;r<n;r++){
+        if (r===col) continue;
+        const factor = M[r][col];
+        for (let c=col; c<=n; c++) M[r][c] -= factor*M[col][c];
+      }
+    }
+    return M.map(row=>row[n]);
+  }
+
+  function homographyFrom4(srcPts, dstPts){
+    // Solve for H mapping dst -> src (inverse map)
+    const A = [];
+    const b = [];
+    for (let i=0;i<4;i++){
+      const X = dstPts[i].x, Y = dstPts[i].y;
+      const x = srcPts[i].x, y = srcPts[i].y;
+      A.push([X, Y, 1, 0, 0, 0, -x*X, -x*Y]); b.push(x);
+      A.push([0, 0, 0, X, Y, 1, -y*X, -y*Y]); b.push(y);
+    }
+    const h = solveLinear(A, b);
+    if (!h) return null;
+    return { h11:h[0], h12:h[1], h13:h[2], h21:h[3], h22:h[4], h23:h[5], h31:h[6], h32:h[7] };
+  }
+  function applyHomography(H, X, Y){
+    const den = H.h31*X + H.h32*Y + 1;
+    return { x: (H.h11*X + H.h12*Y + H.h13)/den, y: (H.h21*X + H.h22*Y + H.h23)/den };
+  }
+
+  function sampleBilinear(imgData, w, h, x, y){
+    if (x < 0 || y < 0 || x >= w-1 || y >= h-1) return [0,0,0,0];
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    const x1 = x0 + 1, y1 = y0 + 1;
+    const dx = x - x0, dy = y - y0;
+    const idx = (xx,yy)=> (yy*w + xx)*4;
+    const d = imgData.data;
+    const i00 = idx(x0,y0), i10=idx(x1,y0), i01=idx(x0,y1), i11=idx(x1,y1);
+    const out = [0,0,0,0];
+    for (let c=0;c<4;c++){
+      const v00=d[i00+c], v10=d[i10+c], v01=d[i01+c], v11=d[i11+c];
+      const v0 = v00*(1-dx) + v10*dx;
+      const v1 = v01*(1-dx) + v11*dx;
+      out[c] = v0*(1-dy) + v1*dy;
+    }
+    return out;
+  }
+
+  function applyRotate(){
+    if (rotPts.length !== 2) return;
+    const a = rotPts[0], b = rotPts[1];
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const ang = Math.atan2(dy, dx);
+
+    // Snap to the nearest axis so drawing a vertical border doesn't rotate the card 90°
+    const isVertical = Math.abs(dy) > Math.abs(dx);
+    const target = isVertical ? (Math.PI / 2) : 0;
+    const rot = target - ang; // rotate line onto target axis
+    const cos = Math.cos(rot), sin = Math.sin(rot);
+    const cx = imgW/2, cy = imgH/2;
+
+    const outC = document.createElement("canvas");
+    outC.width = imgW; outC.height = imgH;
+    const octx = outC.getContext("2d");
+    octx.clearRect(0,0,imgW,imgH);
+    octx.save();
+    octx.translate(cx,cy);
+    octx.rotate(rot);
+    octx.translate(-cx,-cy);
+    octx.drawImage(currentCanvas,0,0);
+    octx.restore();
+    currentCanvas = outC;
+
+    // reset
+    geomCapturing = false;
+    rotPts = [];
+    clearAll();
+    centreImage();
+    setToast("Rotation applied.");
+    syncUI();
+    draw();
+  }
+
+  function applyPerspective(){
+    if (perspLines.length !== 4 || perspTemp) return;
+    const top = perspLines[0], right = perspLines[1], bottom = perspLines[2], left = perspLines[3];
+    const TL = lineIntersection(top, left);
+    const TR = lineIntersection(top, right);
+    const BR = lineIntersection(bottom, right);
+    const BL = lineIntersection(bottom, left);
+    if (!TL || !TR || !BR || !BL){
+      setToast("Could not intersect lines. Try again.");
+      return;
+    }
+    const dist = (p,q)=>Math.hypot(p.x-q.x, p.y-q.y);
+    const w0 = dist(TL, TR), w1 = dist(BL, BR);
+    const h0 = dist(TL, BL), h1 = dist(TR, BR);
+
+    let wRect = (w0 + w1)/2;
+    let hRect = (h0 + h1)/2;
+    if (wRect < 10 || hRect < 10){
+      setToast("Lines too close. Draw longer lines.");
+      return;
+    }
+
+    // Constrain to Pokémon aspect ratio using both estimates
+    const wFromH = hRect / POKEMON_AR;
+    const Wcard = (wRect + wFromH)/2;
+    const Hcard = Wcard * POKEMON_AR;
+    wRect = Wcard;
+    hRect = Hcard;
+
+    // Fit rect into the existing image dimensions (keep full output canvas size)
+    const scale = 0.95 * Math.min(imgW / wRect, imgH / hRect);
+    const W = wRect * scale;
+    const H = hRect * scale;
+    const ox = (imgW - W)/2;
+    const oy = (imgH - H)/2;
+
+    const dstPts = [
+      {x: ox,   y: oy},
+      {x: ox+W, y: oy},
+      {x: ox+W, y: oy+H},
+      {x: ox,   y: oy+H},
+    ];
+    const srcPts = [TL, TR, BR, BL];
+
+    const Hmap = homographyFrom4(srcPts, dstPts);
+    if (!Hmap){
+      setToast("Perspective solve failed. Try again.");
+      return;
+    }
+
+    // read source pixels
+    const sctx = currentCanvas.getContext("2d", {willReadFrequently:true});
+    const srcImg = sctx.getImageData(0,0,imgW,imgH);
+
+    const outC = document.createElement("canvas");
+    outC.width = imgW; outC.height = imgH;
+    const octx = outC.getContext("2d", {willReadFrequently:true});
+    const outImg = octx.createImageData(imgW, imgH);
+
+    for (let y=0;y<imgH;y++){
+      for (let x=0;x<imgW;x++){
+        const p = applyHomography(Hmap, x, y);
+        const rgba = sampleBilinear(srcImg, imgW, imgH, p.x, p.y);
+        const i = (y*imgW + x)*4;
+        outImg.data[i+0]=rgba[0];
+        outImg.data[i+1]=rgba[1];
+        outImg.data[i+2]=rgba[2];
+        outImg.data[i+3]=rgba[3];
+      }
+    }
+    octx.putImageData(outImg,0,0);
+    currentCanvas = outC;
+
+    geomCapturing = false;
+    perspLines = [];
+    perspTemp = null;
+    clearAll();
+    centreImage();
+    setToast("Perspective applied (63×88).");
+    syncUI();
+    draw();
+  }
+
+  // ---------- Input: upload/reset/export ----------
+  uploadBtn.addEventListener("click", ()=> fileInput.click());
+  fileInput.addEventListener("change", async (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+      imgW = img.naturalWidth; saveActiveSide();
+      imgH = img.naturalHeight;
+
+      baseCanvas = document.createElement("canvas");
+      baseCanvas.width = imgW; baseCanvas.height = imgH;
+      baseCanvas.getContext("2d").drawImage(img,0,0);
+
+      currentCanvas = document.createElement("canvas");
+      currentCanvas.width = imgW; currentCanvas.height = imgH;
+      currentCanvas.getContext("2d").drawImage(img,0,0);
+
+      URL.revokeObjectURL(url);
+      zoom = 1; panX = 0; panY = 0;
+      geomModeSel.value = "none";
+      geomMode = "none";
+      geomCapturing = false;
+      rotPts = [];
+      perspLines = []; perspTemp = null;
+
+      clearAll();
+      activeAxis = "lr";
+      centreImage();
+      resize();
+      syncUI();
+      saveActiveSide();
+      setToast(`Image loaded (${activeSide}): ${imgW}×${imgH}`);
+      draw();
+      }catch(err){
+        console.error(err);
+        setToast("Load failed: " + (err && err.message ? err.message : "unknown"));
+      }
+    };
+    img.onerror = (e)=> { console.error(e); setToast("Could not load image."); };
+    img.src = url;
+  });
+
+  resetBtn.addEventListener("click", ()=>{
+    saveActiveSide();
+    if (!baseCanvas) return;
+    currentCanvas = document.createElement("canvas");
+    currentCanvas.width = imgW; currentCanvas.height = imgH;
+    currentCanvas.getContext("2d").drawImage(baseCanvas,0,0);
+    geomMode = "none";
+    geomModeSel.value = "none";
+    geomCapturing = false;
+    rotPts = [];
+    perspLines = []; perspTemp = null;
+    clearAll();
+    activeAxis = "lr";
+    centreImage();
+    syncUI();
+    draw();
+    setToast("Reset.");
+  });
+
+
+  // (Removed broken legacy single-side export block)
+
+
+  // ---------- Geometry UI ----------
+  geomModeSel.addEventListener("change", ()=>{
+    geomMode = geomModeSel.value;
+    geomCapturing = false;
+    rotPts = [];
+    perspLines = []; perspTemp = null;
+    syncUI();
+    draw();
+  });
+  geomStart.addEventListener("click", ()=>{
+    if (geomMode === "none") return;
+    geomCapturing = true;
+    rotPts = [];
+    perspLines = []; perspTemp = null;
+    setToast("Capture started.");
+    syncUI();
+    draw();
+  });
+  geomCancel.addEventListener("click", ()=>{
+    geomCapturing = false;
+    rotPts = [];
+    perspLines = []; perspTemp = null;
+    setToast("Cancelled.");
+    syncUI();
+    draw();
+  });
+  geomApply.addEventListener("click", ()=>{
+    if (geomMode === "rotate") applyRotate();
+    else if (geomMode === "persp") applyPerspective();
+  });
+
+  // ---------- Measure UI ----------
+  measureLR.addEventListener("click", ()=>{ activeAxis="lr"; syncUI(); draw(); });
+  measureTB.addEventListener("click", ()=>{ activeAxis="tb"; syncUI(); draw(); });
+  clearMarks.addEventListener("click", ()=>{ clearAxis(activeAxis); setToast("Cleared selected."); });
+  clearMarksAll.addEventListener("click", ()=>{ clearAll(); setToast("Cleared all measurements."); });
+
+  // Undo and reset axis
+  window.addEventListener("keydown", (e)=>{
+    const k = e.key.toLowerCase();
+    if (k === "u"){
+      const pts = MS()[activeAxis].pts;
+      if (pts.length){
+        pts.pop();
+        MS()[activeAxis].result = null;
+        updateResults();
+        syncUI();
+        draw();
+      }
+    }
+    if (k === "r"){
+      clearAxis(activeAxis);
+    }
+  });
+
+  // ---------- Pointer interactions: pinch zoom, pan, clicks ----------
+  function setZoomAround(newZoom, anchorX, anchorY){
+    newZoom = clamp(newZoom, 0.10, 24.0);
+    const before = screenToImg(anchorX, anchorY);
+    zoom = newZoom;
+    // Keep the anchor point stable
+    panX = anchorX - before.x * zoom;
+    panY = anchorY - before.y * zoom;
+    updateZoomPill();
+    draw();
+  }
+  function centerViewOnImgPoint(imgPt){
+    const r = wrap.getBoundingClientRect();
+    const cx = r.width/2;
+    const cy = r.height/2;
+    panX = cx - imgPt.x * zoom;
+    panY = cy - imgPt.y * zoom;
+  }
+
+  function autoJumpAfterSecondClick(axis){
+    // Auto jump intentionally disabled in v7.3.17 clean branch.
+    return;
+    
+}
+
+
+  wrap.addEventListener("wheel", (e)=>{
+    if (!currentCanvas) return;
+    e.preventDefault();
+    const r = wrap.getBoundingClientRect();
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+
+    // Trackpads: two-finger scroll should PAN. Pinch-to-zoom on trackpads is typically wheel + ctrlKey.
+    if (e.ctrlKey) {
+      // Faster zoom
+      const factor = Math.exp(-e.deltaY * 0.0048);
+      setZoomAround(zoom * factor, sx, sy);
+    } else {
+      // Pan with wheel deltas (natural)
+      panX -= e.deltaX;
+      panY -= e.deltaY;
+      draw();
+    }
+  }, { passive:false });
+
+  // Mouse hover updates for preview lines (pointermove only fires when a pointer is tracked).
+  wrap.addEventListener("mousemove", (e)=>{
+    if (!currentCanvas) return;
+    const r = wrap.getBoundingClientRect();
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+    const raw = screenToImg(sx, sy);
+    pointerImgPt = raw.inBounds ? { x: raw.x, y: raw.y } : null;
+    draw();
+  });
+
+  wrap.addEventListener("mouseleave", ()=>{
+    pointerImgPt = null;
+    hoverImgPt = null;
+    draw();
+  });
+
+  wrap.addEventListener("pointerdown", (e)=>{
+    wrap.setPointerCapture(e.pointerId);
+    const r = wrap.getBoundingClientRect();
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+    pointers.set(e.pointerId, {x:sx,y:sy,type:e.pointerType,buttons:e.buttons});
+
+    // Middle mouse panning
+    if (e.pointerType === "mouse" && e.button === 1){
+      isMiddlePanning = true;
+      middlePanStart = { x:sx, y:sy, panX, panY };
+      return;
+    }
+
+    // If we have 2 pointers, initialise pinch
+    if (pointers.size === 2){
+      const pts = Array.from(pointers.values());
+      pinchStartDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinchStartZoom = zoom;
+      pinchStartPanX = panX;
+      pinchStartPanY = panY;
+      pinchStartCenter = { x: (pts[0].x + pts[1].x)/2, y: (pts[0].y + pts[1].y)/2 };
+    }
+  });
+
+  wrap.addEventListener("pointermove", (e)=>{
+    if (!pointers.has(e.pointerId)) return;
+    const r = wrap.getBoundingClientRect();
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+    pointers.set(e.pointerId, {x:sx,y:sy,type:e.pointerType,buttons:e.buttons});
+
+    if (!currentCanvas) return;
+
+    // Update hover point for locked previews (only when not pinching and not middle-panning)
+    if (!isMiddlePanning && pointers.size < 2) {
+      const raw = screenToImg(sx, sy);
+      if (raw.inBounds) {
+        hoverImgPt = { x: raw.x, y: raw.y };
+        pointerImgPt = { x: raw.x, y: raw.y };
+      } else {
+        hoverImgPt = null;
+        pointerImgPt = null;
+      }
+    }
+
+    if (isMiddlePanning){
+      panX = middlePanStart.panX + (sx - middlePanStart.x);
+      panY = middlePanStart.panY + (sy - middlePanStart.y);
+      draw();
+      return;
+    }
+
+    // Pinch zoom + two-finger pan
+    if (pointers.size === 2){
+      const pts = Array.from(pointers.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const center = { x: (pts[0].x + pts[1].x)/2, y: (pts[0].y + pts[1].y)/2 };
+
+      // Always allow two-finger PAN (centroid movement)
+      panX = pinchStartPanX + (center.x - pinchStartCenter.x);
+      panY = pinchStartPanY + (center.y - pinchStartCenter.y);
+
+      // Only apply ZOOM if the pinch distance actually changed meaningfully.
+      const distDelta = Math.abs(dist - pinchStartDist);
+      const zoomThresholdPx = 3;           // ignore tiny finger jitter (snappier)
+      const zoomThresholdRel = 0.006;      // or ~0.6% change (snappier)
+      const relDelta = (pinchStartDist > 0.001) ? distDelta / pinchStartDist : 0;
+
+      if (pinchStartDist > 0.001 && (distDelta > zoomThresholdPx || relDelta > zoomThresholdRel)){
+        const factorRaw = dist / pinchStartDist;
+        const factor = Math.pow(factorRaw, 1.7);
+        const newZoom = pinchStartZoom * factor;
+
+        // Keep centroid stable in image space
+        const before = screenToImg(center.x, center.y);
+        zoom = clamp(newZoom, 0.08, 24.0);
+        panX = center.x - before.x * zoom;
+        panY = center.y - before.y * zoom;
+        updateZoomPill();
+      }
+
+      draw();
+      return;
+    }
+  });
+
+  wrap.addEventListener("pointerup", (e)=>{
+    if (e.pointerType === "mouse" && e.button === 1){
+      isMiddlePanning = false;
+    }
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2){
+      pinchStartDist = 0;
+    }
+    if (pointers.size === 0) { hoverImgPt = null; pointerImgPt = null; }
+  });
+
+  wrap.addEventListener("pointercancel", (e)=>{
+    pointers.delete(e.pointerId);
+    isMiddlePanning = false;
+    pinchStartDist = 0;
+    hoverImgPt = null;
+  });
+
+  // Click to add points (ignore if pinch or middle pan or geom capture is off?)
+  wrap.addEventListener("click", (e)=>{
+    if (!currentCanvas) return;
+    // Avoid click events after middle button pan or pinch
+    if (isMiddlePanning) return;
+    if (pointers.size >= 2) return;
+    // ignore click if it's middle button
+    if (e.button === 1) return;
+
+    const r = wrap.getBoundingClientRect();
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+
+    const raw0 = screenToImg(sx, sy);
+    if (!raw0.inBounds){
+      setToast("Click was outside the image. Pan/zoom and click on the card.");
+      return;
+    }
+    const raw = { x: raw0.x, y: raw0.y };
+
+    // Geometry capture routing
+    if (geomCapturing){
+      if (geomMode === "rotate"){
+        if (rotPts.length >= 2) return;
+        rotPts.push(raw);
+        syncUI(); draw();
+        return;
+      }
+      if (geomMode === "persp"){
+        if (perspLines.length >= 4 && !perspTemp) return;
+        if (!perspTemp){
+          perspTemp = raw;
+        } else {
+          perspLines.push({ a: perspTemp, b: raw });
+          perspTemp = null;
+        }
+        syncUI(); draw();
+        return;
+      }
+      return;
+    }
+
+    // Measurement mode
+    const pts = MS()[activeAxis].pts;
+    if (pts.length >= 4) return;
+
+    // Snap ALL subsequent clicks to the axis defined by the first click for this measurement set.
+    let snapped = raw;
+    if (pts.length >= 1) {
+      snapped = projectToAxis(pts[0], raw, activeAxis);
+    }
+
+    // If user switches axis mid-way, that's allowed
+    pts.push(snapped);
+    MS()[activeAxis].result = null;
+
+    // After the 2nd click (first edge complete), jump view to the estimated opposite edge
+    if (pts.length === 2){
+      autoJumpAfterSecondClick(activeAxis);
+    }
+
+    if (pts.length === 4){
+      finishAxisIfReady(activeAxis);
+    } else {
+      syncUI();
+      draw();
+    }
+  });
+
+  
+  // Init
+  resize();
+  syncUI();
+  updateResults();
+
+
+  // ===== SAFE PDF EXPORT (DOM-based, parser-proof) =====
+  exportBtn.addEventListener("click", ()=>{
+    const f = measureSides.front;
+    const b = measureSides.back;
+
+    if (!(f.lr.result && f.tb.result && b.lr.result && b.tb.result)) {
+      setToast("Measure both Front and Back before exporting.");
+      return;
+    }
+
+    const w = window.open("", "_blank");
+    if (!w){
+      setToast("Popup blocked. Allow popups to export.");
+      return;
+    }
+
+    const d = w.document;
+    d.open();
+
+    const html = d.createElement("html");
+    const head = d.createElement("head");
+    const body = d.createElement("body");
+
+    const meta = d.createElement("meta");
+    meta.setAttribute("charset","utf-8");
+    head.appendChild(meta);
+
+    const style = d.createElement("style");
+    style.textContent =
+      "body{font-family:system-ui,ui-sans-serif;margin:20px;color:#111;}" +
+      "h1{margin:0 0 6px 0;} h2{margin:18px 0 6px 0;}" +
+      ".meta{font-size:12px;color:#555;margin-bottom:12px;}" +
+      ".page{page-break-after:always;}" +
+      ".page:last-child{page-break-after:auto;}" +
+      "img{width:100%;max-height:65vh;object-fit:contain;border:1px solid #ddd;border-radius:12px;}" +
+      ".grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;}" +
+      ".box{border:1px solid #ddd;border-radius:12px;padding:12px;}" +
+      ".label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#666;font-weight:800;}" +
+      ".val{font-size:20px;font-weight:900;margin-top:6px;}" +
+      ".small{font-size:12px;white-space:pre-line;color:#444;}" +
+      "@media print{body{margin:12mm;} img{max-height:150mm;}}";
+    head.appendChild(style);
+
+    function buildPage(sideKey, label){
+      const s = sides[sideKey];
+      const m = measureSides[sideKey];
+
+      const page = d.createElement("div");
+      page.className = "page";
+
+      const h = d.createElement("h2");
+      h.textContent = label;
+      page.appendChild(h);
+
+      const img = d.createElement("img");
+      img.src = s.currentCanvas.toDataURL("image/png");
+      page.appendChild(img);
+
+      const grid = d.createElement("div");
+      grid.className = "grid";
+
+      function box(title, res){
+        const b = d.createElement("div");
+        b.className = "box";
+        const l = d.createElement("div");
+        l.className = "label";
+        l.textContent = title;
+        const v = d.createElement("div");
+        v.className = "val";
+        v.textContent = Math.round(res.big) + "/" + Math.round(res.small);
+        const t = d.createElement("div");
+        t.className = "small";
+        t.textContent = res.text;
+        b.appendChild(l); b.appendChild(v); b.appendChild(t);
+        return b;
+      }
+
+      grid.appendChild(box("Left / Right", m.lr.result));
+      grid.appendChild(box("Top / Bottom", m.tb.result));
+      page.appendChild(grid);
+
+      return page;
+    }
+
+    const title = d.createElement("h1");
+    title.textContent = "Card Centering Measurement";
+    body.appendChild(title);
+
+    const info = d.createElement("div");
+    info.className = "meta";
+    info.textContent = "Exported: " + new Date().toLocaleString() + " | Aspect ratio: 63x88 mm";
+    body.appendChild(info);
+
+    body.appendChild(buildPage("front","Front"));
+    body.appendChild(buildPage("back","Back"));
+
+    html.appendChild(head);
+    html.appendChild(body);
+    d.appendChild(html);
+    d.close();
+
+    w.onload = ()=>setTimeout(()=>w.print(), 300);
+  });
+
+
+})();
+</script>
+</body>
+</html>
