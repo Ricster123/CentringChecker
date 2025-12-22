@@ -243,6 +243,89 @@
 
   .divider{ height:1px; background: var(--border); margin: 10px 0; }
 
+
+/* --- Help modal --- */
+.modal-backdrop{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding: 18px;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+}
+.modal-backdrop.open{ display:flex; }
+
+.modal{
+  width: min(760px, 96vw);
+  max-height: min(78vh, 760px);
+  overflow:hidden;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 82%, #000 18%);
+  box-shadow: 0 28px 80px rgba(0,0,0,0.55);
+}
+@media (prefers-color-scheme: light){
+  .modal{ background: color-mix(in srgb, var(--bg) 92%, #fff 8%); }
+}
+
+.modal-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding: 14px 14px 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+}
+.modal-title{
+  font-weight: 950;
+  letter-spacing: 0.2px;
+  font-size: 16px;
+}
+.modal-close{
+  padding: 6px 10px;
+  border-radius: 12px;
+  box-shadow:none;
+}
+
+.modal-body{
+  padding: 14px 16px 16px 16px;
+  overflow:auto;
+}
+.modal-section{ margin-bottom: 14px; }
+.modal-h{
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px 0;
+}
+.modal-list{
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.45;
+  color: var(--text);
+  font-size: 13px;
+}
+.modal-sublist{
+  margin: 6px 0 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+.modal-note{
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--muted);
+  font-size: 12px;
+}
+
 </style>
 </head>
 <body>
@@ -257,6 +340,7 @@
       </div>
 
       <span class="pill" id="zoomPill">100%</span>
+      <button class="btn" id="helpBtn" title="User guide">Help</button>
       <button class="btn" id="uploadBtn">Upload</button>
       <button class="btn" id="resetBtn" disabled>Reset</button>
       <button class="btn accent" id="exportBtn" disabled>Export PDF</button>
@@ -351,6 +435,72 @@
         </div>
       </div>
     </div>
+
+<!-- User guide modal -->
+<div class="modal-backdrop" id="helpModal" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="modal-header">
+      <div class="modal-title" id="helpTitle">User guide</div>
+      <button class="btn ghost modal-close" id="helpClose" aria-label="Close">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="modal-section">
+        <div class="modal-h">1) Load images</div>
+        <ul class="modal-list">
+          <li>Click <b>Upload</b> to load an image for the selected side (Front or Back).</li>
+          <li>Use the <b>Front</b> and <b>Back</b> tabs to switch sides. Each side keeps its own zoom, pan, and measurements.</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-h">2) Move and zoom</div>
+        <ul class="modal-list">
+          <li><b>Mouse wheel</b> zooms in and out.</li>
+          <li><b>Trackpad two finger scroll</b> pans around.</li>
+          <li><b>Pinch</b> on touch devices zooms. Two finger drag pans.</li>
+          <li><b>Middle mouse drag</b> pans on desktop.</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-h">3) Geometry correction (optional)</div>
+        <ul class="modal-list">
+          <li>Select a mode under <b>Geometry correction</b> then press <b>Start</b>.</li>
+          <li><b>Rotate only</b>: click 2 points along a border, then press <b>Apply</b>.</li>
+          <li><b>Perspective</b>: draw 4 short lines in order <b>Top, Right, Bottom, Left</b> (8 clicks total), then <b>Apply</b>.</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-h">4) Measure centring</div>
+        <ul class="modal-list">
+          <li>Choose <b>Left / Right</b> or <b>Top / Bottom</b>.</li>
+          <li>Follow the order shown in <b>Status</b> exactly:
+            <ul class="modal-sublist">
+              <li>LR: L1 outer, L2 inner, R1 inner, R2 outer</li>
+              <li>TB: T1 outer, T2 inner, B1 inner, B2 outer</li>
+            </ul>
+          </li>
+          <li>Tips: zoom in so you can place clicks precisely on the border edges.</li>
+        </ul>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-h">5) Shortcuts and export</div>
+        <ul class="modal-list">
+          <li><b>U</b> undo last click for the active axis.</li>
+          <li><b>R</b> clear the active axis.</li>
+          <li>When Front and Back both have LR and TB measured, <b>Export PDF</b> enables.</li>
+        </ul>
+      </div>
+
+      <div class="modal-note">
+        Click outside this box or press <b>Esc</b> to close.
+      </div>
+    </div>
+  </div>
+</div>
   </div>
 </div>
 
@@ -391,6 +541,45 @@ const measureLR = document.getElementById("measureLR");
   const tbInfo = document.getElementById("tbInfo");
 
   const toast = document.getElementById("toast");
+
+
+// ---------- Help modal ----------
+const helpBtn = document.getElementById("helpBtn");
+const helpModal = document.getElementById("helpModal");
+const helpClose = document.getElementById("helpClose");
+
+function openHelp(){
+  if (!helpModal) return;
+  helpModal.classList.add("open");
+  helpModal.setAttribute("aria-hidden","false");
+  // Prevent background interactions from feeling weird
+  setToast("Tip: use middle mouse to pan, wheel to zoom.", 2200);
+  // Focus the close button for keyboard users
+  if (helpClose) helpClose.focus({preventScroll:true});
+}
+function closeHelp(){
+  if (!helpModal) return;
+  helpModal.classList.remove("open");
+  helpModal.setAttribute("aria-hidden","true");
+  if (helpBtn) helpBtn.focus({preventScroll:true});
+}
+
+if (helpBtn) helpBtn.addEventListener("click", openHelp);
+if (helpClose) helpClose.addEventListener("click", closeHelp);
+
+// Click outside the modal to close
+if (helpModal) helpModal.addEventListener("mousedown", (e)=>{
+  if (e.target === helpModal) closeHelp();
+});
+
+// Escape to close
+window.addEventListener("keydown", (e)=>{
+  if (e.key === "Escape" && helpModal && helpModal.classList.contains("open")){
+    e.preventDefault();
+    closeHelp();
+  }
+});
+
 
   const fileInput = document.createElement("input");
   fileInput.type = "file";
