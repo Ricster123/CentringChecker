@@ -765,7 +765,7 @@ window.addEventListener("keydown", (e)=>{
     return measureSides[activeSide];
   }
 
-  // ===== Perspective rect per side (used for auto-measure) =====
+  // ===== Perspective rect per side (used for measurement) =====
   function setPerspRect(sideKey, rect){
     if (!sides[sideKey]) return;
     sides[sideKey].perspRect = rect;
@@ -880,7 +880,7 @@ window.addEventListener("keydown", (e)=>{
   }
   // --- Shared edge-strength helpers (used by Snap-to-border) ---
   // These are lightweight gradient-based edge detectors over the CURRENT canvas pixels.
-  // They are global-scope so they can be used by mousemove/click snapping without any auto-measure pipeline.
+  // They are global-scope so they can be used by mousemove/click snapping without any measurement pipeline.
   let _snapImgCache = { canvas: null, w: 0, h: 0, img: null, t: 0 };
 
   function _getSnapImageData(){
@@ -1028,7 +1028,7 @@ function edgeStrengthY(x, y){
 }
 
 // --- Snap-to-border (manual measuring helper) ---
-// This intentionally does NOT "auto measure". It only nudges the user's click/hover to a nearby strong edge.
+// This intentionally does NOT "measurement". It only nudges the user's click/hover to a nearby strong edge.
 const SNAP_SEARCH_PX = 90;         // how far (in image pixels) to search from the cursor
 const BASE_SNAP_MIN_STRENGTH = 2.8;      // lower = more eager snapping (helps colourful inner borders)
 const SNAP_MIN_EDGE_STRENGTH = 4.0; // base minimum edge strength (scaled by slider)
@@ -1747,6 +1747,157 @@ for (const key of ["lr","tb"]){
     }
   }
 
+// --- Added: line-line intersection helper (required by applyPerspective) ---
+function lineIntersection(l1, l2){
+  // l1, l2: { a:{x,y}, b:{x,y} }
+  const x1 = l1.a.x, y1 = l1.a.y;
+  const x2 = l1.b.x, y2 = l1.b.y;
+  const x3 = l2.a.x, y3 = l2.a.y;
+  const x4 = l2.b.x, y4 = l2.b.y;
+
+  const denom = (x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4);
+  if (Math.abs(denom) < 1e-6) return null; // parallel or unstable
+
+  const px =
+    ((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)) / denom;
+  const py =
+    ((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)) / denom;
+
+  return { x: px, y: py };
+}
+
+// --- Added: homography + resampling helpers (required by applyPerspective) ---
+// Build a homography that maps destination -> source (inverse mapping) so every output pixel can sample a source pixel.
+function homographyFrom4(srcPts, dstPts){
+  if (!srcPts || !dstPts || srcPts.length !== 4 || dstPts.length !== 4) return null;
+  // We want H such that: [x_s, y_s, 1]^T ~ H * [x_d, y_d, 1]^T
+  // So solve fromPts = dstPts, toPts = srcPts
+  return _solveHomography4(dstPts, srcPts);
+}
+
+function _solveHomography4(fromPts, toPts){
+  // Solves for 8 unknowns with h33 = 1 using Gaussian elimination.
+  // For each correspondence (x,y) -> (u,v):
+  // u = (h11 x + h12 y + h13) / (h31 x + h32 y + 1)
+  // v = (h21 x + h22 y + h23) / (h31 x + h32 y + 1)
+  const A = [];
+  const b = [];
+
+  for (let i = 0; i < 4; i++){
+    const x = fromPts[i].x, y = fromPts[i].y;
+    const u = toPts[i].x,   v = toPts[i].y;
+
+    // u equation
+    A.push([ x, y, 1, 0, 0, 0, -u*x, -u*y ]);
+    b.push(u);
+    // v equation
+    A.push([ 0, 0, 0, x, y, 1, -v*x, -v*y ]);
+    b.push(v);
+  }
+
+  const h = _gaussSolve(A, b);
+  if (!h) return null;
+  // append h33 = 1
+  return [h[0],h[1],h[2], h[3],h[4],h[5], h[6],h[7], 1];
+}
+
+function _gaussSolve(A, b){
+  // A: n x n, b: n
+  const n = A.length;
+  if (!n || A[0].length !== n || b.length !== n) return null;
+
+  // build augmented matrix
+  const M = new Array(n);
+  for (let i = 0; i < n; i++){
+    M[i] = A[i].slice();
+    M[i].push(b[i]);
+  }
+
+  for (let col = 0; col < n; col++){
+    // find pivot
+    let pivot = col;
+    let maxAbs = Math.abs(M[col][col]);
+    for (let row = col + 1; row < n; row++){
+      const v = Math.abs(M[row][col]);
+      if (v > maxAbs){
+        maxAbs = v;
+        pivot = row;
+      }
+    }
+    if (maxAbs < 1e-10) return null; // singular/unstable
+
+    // swap
+    if (pivot !== col){
+      const tmp = M[col]; M[col] = M[pivot]; M[pivot] = tmp;
+    }
+
+    // normalize pivot row
+    const pv = M[col][col];
+    for (let j = col; j <= n; j++) M[col][j] /= pv;
+
+    // eliminate other rows
+    for (let row = 0; row < n; row++){
+      if (row === col) continue;
+      const f = M[row][col];
+      if (Math.abs(f) < 1e-12) continue;
+      for (let j = col; j <= n; j++){
+        M[row][j] -= f * M[col][j];
+      }
+    }
+  }
+
+  // extract solution
+  const x = new Array(n);
+  for (let i = 0; i < n; i++) x[i] = M[i][n];
+  return x;
+}
+
+function applyHomography(H, x, y){
+  // H: [h11,h12,h13,h21,h22,h23,h31,h32,h33]
+  const den = H[6]*x + H[7]*y + H[8];
+  if (Math.abs(den) < 1e-12) return { x: 0, y: 0 };
+  return {
+    x: (H[0]*x + H[1]*y + H[2]) / den,
+    y: (H[3]*x + H[4]*y + H[5]) / den
+  };
+}
+
+function sampleBilinear(imgData, w, h, x, y){
+  // Returns [r,g,b,a] bilinearly sampled from ImageData.
+  // Outside image => transparent.
+  if (!imgData || !imgData.data) return [0,0,0,0];
+  if (x < 0 || y < 0 || x > (w - 1) || y > (h - 1)) return [0,0,0,0];
+
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const x1 = Math.min(w - 1, x0 + 1);
+  const y1 = Math.min(h - 1, y0 + 1);
+
+  const dx = x - x0;
+  const dy = y - y0;
+
+  const d = imgData.data;
+  const i00 = (y0*w + x0) * 4;
+  const i10 = (y0*w + x1) * 4;
+  const i01 = (y1*w + x0) * 4;
+  const i11 = (y1*w + x1) * 4;
+
+  const out = [0,0,0,0];
+  for (let c = 0; c < 4; c++){
+    const v00 = d[i00 + c];
+    const v10 = d[i10 + c];
+    const v01 = d[i01 + c];
+    const v11 = d[i11 + c];
+
+    const v0 = v00 + (v10 - v00) * dx;
+    const v1 = v01 + (v11 - v01) * dx;
+    out[c] = Math.round(v0 + (v1 - v0) * dy);
+  }
+  return out;
+}
+
+
+
 
   
 
@@ -1861,16 +2012,16 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
     perspTemp = null;
 
     // Store the exact outer rectangle we mapped the card into.
-    // This is "known truth" from the perspective step and is used for auto-measure.
+    // This is "known truth" from the perspective step and is used for measurement.
     setPerspRect(activeSide, { ox, oy, W, H });
 
     // Always clear previous manual measurements after a geometry warp
     clearAll();
     centreImage();
 
-    // Optional one-click auto-measure is available after perspective.
+    // Optional one-click measurement is available after perspective.
     // Users can still measure manually.
-    setToast("Perspective applied. Click Auto measure, or measure manually.");
+    setToast("Perspective applied. Click measurement, or measure manually.");
 
     saveActiveSide();
     syncUI();
