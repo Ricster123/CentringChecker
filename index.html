@@ -326,6 +326,43 @@
   font-size: 12px;
 }
 
+
+    .snapToggle{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 10px;
+      border:1px solid rgba(255,255,255,0.12);
+      border-radius:10px;
+      user-select:none;
+      cursor:pointer;
+      font-size:13px;
+      color: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.04);
+    }
+  .edgeAgg{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 10px;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:rgba(255,255,255,0.04);
+    font-size:12px;
+    user-select:none;
+  }
+  .edgeAgg input[type="range"]{
+    width:140px;
+  }
+  .edgeAgg .mono{
+    font-variant-numeric: tabular-nums;
+    min-width:54px;
+    text-align:right;
+  }
+
+    .snapToggle input{ accent-color: var(--accent); }
+    .snapToggle span{ white-space:nowrap; }
+
 </style>
 </head>
 <body>
@@ -383,7 +420,18 @@
             <div class="row">
               <button class="btn primary" id="measureLR" disabled>Left / Right</button>
               <button class="btn primary" id="measureTB" disabled>Top / Bottom</button>
-              <button class="btn danger" id="clearMarks" disabled>Clear selected</button>
+              <label class="snapToggle" title="When measuring, clicks will snap to the nearest strong border edge">
+                <input type="checkbox" id="snapToBorderToggle">
+                <span>Snap to border</span>
+              </label>
+
+              <label class="edgeAgg" title="Adjust how aggressively the tool detects edges (inner borders often need higher values)">
+                <span>Edge detect</span>
+                <input type="range" id="edgeAggSlider" min="50" max="250" value="120" step="5">
+                <span class="mono" id="edgeAggVal">1.20×</span>
+              </label>
+
+<button class="btn danger" id="clearMarks" disabled>Clear selected</button>
               <button class="btn" id="clearMarksAll" disabled>Clear all</button>
             </div>
             <div class="hint">
@@ -513,7 +561,7 @@
 
   const wrap = document.getElementById("wrap");
   const canvas = document.getElementById("view");
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
   const uploadBtn = document.getElementById("uploadBtn");
   const geomModeSel = document.getElementById("geomMode");
@@ -528,7 +576,34 @@
   const zoomPill = document.getElementById("zoomPill");
 const measureLR = document.getElementById("measureLR");
   const measureTB = document.getElementById("measureTB");
-  const clearMarks = document.getElementById("clearMarks");
+  const snapToBorderToggle = document.getElementById("snapToBorderToggle");
+  let snapToBorderEnabled = false;
+  if (snapToBorderToggle) snapToBorderToggle.addEventListener("change", ()=>{ snapToBorderEnabled = !!snapToBorderToggle.checked; _invalidateSnapCaches(); draw(); });
+
+  // Edge detection aggressiveness (higher helps inner borders)
+  const edgeAggSlider = document.getElementById("edgeAggSlider");
+  const edgeAggVal = document.getElementById("edgeAggVal");
+  let EDGE_AGGRESSIVENESS = 1.20; // default matches slider value 120%
+
+  function _edgeAgg(){
+    return Math.max(0.5, Math.min(2.5, EDGE_AGGRESSIVENESS));
+  }
+  function _snapMinStrength(){
+    // Higher aggressiveness both boosts measured strength and relaxes the cutoff a bit.
+    return BASE_SNAP_MIN_STRENGTH / _edgeAgg();
+  }
+
+  if (edgeAggSlider){
+    const apply = ()=>{
+      const v = Number(edgeAggSlider.value || 120);
+      EDGE_AGGRESSIVENESS = v / 100;
+      if (edgeAggVal) edgeAggVal.textContent = `${EDGE_AGGRESSIVENESS.toFixed(2)}×`;
+      draw();
+    };
+    edgeAggSlider.addEventListener("input", apply);
+    apply();
+  }
+const clearMarks = document.getElementById("clearMarks");
   const clearMarksAll = document.getElementById("clearMarksAll");
   const statusEl = document.getElementById("status");
 
@@ -581,6 +656,12 @@ window.addEventListener("keydown", (e)=>{
   const fileInput = document.createElement("input");
   fileInput.type = "file";
   fileInput.accept = "image/*";
+  fileInput.style.position = "fixed";
+  fileInput.style.left = "-9999px";
+  fileInput.style.top = "-9999px";
+  fileInput.style.opacity = "0";
+  document.body.appendChild(fileInput);
+
 
   // Offscreen canvas holds the current transformed image pixels
   let baseCanvas = null;     // original loaded image
@@ -607,13 +688,15 @@ window.addEventListener("keydown", (e)=>{
       baseCanvas: null,
       currentCanvas: null,
       imgW: 0, imgH: 0,
-      zoom: 1, panX: 0, panY: 0
+      zoom: 1, panX: 0, panY: 0,
+      perspRect: null
     },
     back: {
       baseCanvas: null,
       currentCanvas: null,
       imgW: 0, imgH: 0,
-      zoom: 1, panX: 0, panY: 0
+      zoom: 1, panX: 0, panY: 0,
+      perspRect: null
     }
   };
 
@@ -681,6 +764,16 @@ window.addEventListener("keydown", (e)=>{
   function MS(){
     return measureSides[activeSide];
   }
+
+  // ===== Perspective rect per side (used for auto-measure) =====
+  function setPerspRect(sideKey, rect){
+    if (!sides[sideKey]) return;
+    sides[sideKey].perspRect = rect;
+  }
+  function getPerspRect(){
+    return (sides[activeSide] && sides[activeSide].perspRect) ? sides[activeSide].perspRect : null;
+  }
+
 
   // Initialise side tabs and state once measurement state exists
   syncSideTabs();
@@ -785,6 +878,405 @@ window.addEventListener("keydown", (e)=>{
     if (axis === "lr") return { x: target.x, y: anchor0.y };
     return { x: anchor0.x, y: target.y };
   }
+  // --- Shared edge-strength helpers (used by Snap-to-border) ---
+  // These are lightweight gradient-based edge detectors over the CURRENT canvas pixels.
+  // They are global-scope so they can be used by mousemove/click snapping without any auto-measure pipeline.
+  let _snapImgCache = { canvas: null, w: 0, h: 0, img: null, t: 0 };
+
+  function _getSnapImageData(){
+    // Cache for performance: refresh occasionally, and always when the backing canvas or dimensions change.
+    if (!currentCanvas || !imgW || !imgH) return null;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const stale = (now - (_snapImgCache.t || 0)) > 250; // ms
+    if (_snapImgCache.canvas !== currentCanvas || _snapImgCache.w !== imgW || _snapImgCache.h !== imgH || !_snapImgCache.img || stale){
+      const ctx = currentCanvas.getContext('2d', { willReadFrequently: true });
+      try {
+        _snapImgCache = { canvas: currentCanvas, w: imgW, h: imgH, img: ctx.getImageData(0, 0, imgW, imgH), t: now };
+      } catch (e){
+        // Some browsers can throw if the canvas is tainted. In that case, snapping is disabled gracefully.
+        _snapImgCache = { canvas: currentCanvas, w: imgW, h: imgH, img: null, t: now };
+        return null;
+      }
+    }
+    return _snapImgCache.img;
+  }
+
+  function _lumAt(img, x, y){
+    // Fast-ish luminance estimate from RGBA
+    const w = img.width, h = img.height;
+    x = Math.max(0, Math.min(w - 1, x|0));
+    y = Math.max(0, Math.min(h - 1, y|0));
+    const i = (y * w + x) * 4;
+    const d = img.data;
+    return 0.2126 * d[i] + 0.7152 * d[i+1] + 0.0722 * d[i+2];
+  }
+
+  function _rgbAt(img, x, y){
+    const w = img.width, h = img.height;
+    x = Math.max(0, Math.min(w - 1, x|0));
+    y = Math.max(0, Math.min(h - 1, y|0));
+    const i = (y * w + x) * 4;
+    const d = img.data;
+    return [d[i], d[i+1], d[i+2]];
+  }
+
+  // --- Snap-to-border edge buffers (greyscale + directional gradients) ---
+// For colourful/holo cards, snapping on a greyscale edge map is far more stable than raw RGB contrast.
+let _snapEdgeCache = { canvas: null, w: 0, h: 0, gx: null, gy: null, grayCanvas: null, t: 0 };
+
+function _invalidateSnapCaches(){
+  _snapImgCache = { canvas: null, w: 0, h: 0, img: null, t: 0 };
+  _snapEdgeCache = { canvas: null, w: 0, h: 0, gx: null, gy: null, grayCanvas: null, t: 0 };
+}
+
+function _getSnapDisplayCanvas(){
+  // When snap-to-border is enabled, show a greyscale view (helps the user place points and matches the snap signal).
+  if (!snapToBorderEnabled) return currentCanvas;
+  const e = _getSnapEdgeBuffers();
+  return (e && e.grayCanvas) ? e.grayCanvas : currentCanvas;
+}
+
+function _getSnapEdgeBuffers(){
+  if (!currentCanvas || !imgW || !imgH) return null;
+
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  // Cache is rebuilt only when the underlying image changes (invalidate caches on load/transform).
+  if (_snapEdgeCache.canvas === currentCanvas && _snapEdgeCache.w === imgW && _snapEdgeCache.h === imgH &&
+      _snapEdgeCache.gx && _snapEdgeCache.gy && _snapEdgeCache.grayCanvas){
+    return _snapEdgeCache;
+  }
+
+  const src = _getSnapImageData();
+  if (!src) return null;
+
+  const w = src.width, h = src.height;
+  const d = src.data;
+
+  // Build greyscale array
+  const gray = new Uint8ClampedArray(w * h);
+  for (let i = 0, p = 0; i < d.length; i += 4, p++){
+    // BT.709-ish, but any sane greyscale works here
+    gray[p] = (0.2126 * d[i] + 0.7152 * d[i+1] + 0.0722 * d[i+2]) | 0;
+  }
+
+  // Directional gradients:
+  // gx responds strongly to vertical edges (left/right change)
+  // gy responds strongly to horizontal edges (top/bottom change)
+  const gx = new Uint8ClampedArray(w * h);
+  const gy = new Uint8ClampedArray(w * h);
+
+  // Simple Sobel-lite using 1D [-1,0,1] across each axis, plus a tiny smoothing via neighbour averaging.
+  for (let y = 1; y < h - 1; y++){
+    const row = y * w;
+    for (let x = 1; x < w - 1; x++){
+      const p = row + x;
+
+      const l = gray[p - 1];
+      const r = gray[p + 1];
+      const u = gray[p - w];
+      const dn = gray[p + w];
+
+      // Neighbour smoothing (reduces artwork noise)
+      const l2 = (gray[p - 2] + l) >> 1;
+      const r2 = (gray[p + 2] + r) >> 1;
+      const u2 = (gray[p - 2*w] + u) >> 1;
+      const d2 = (gray[p + 2*w] + dn) >> 1;
+
+      const dx = Math.abs(r2 - l2);
+      const dy = Math.abs(d2 - u2);
+
+      gx[p] = dx > 255 ? 255 : dx;
+      gy[p] = dy > 255 ? 255 : dy;
+    }
+  }
+
+  // Build greyscale display canvas
+  const grayCanvas = document.createElement('canvas');
+  grayCanvas.width = w; grayCanvas.height = h;
+  const gctx = grayCanvas.getContext('2d', { willReadFrequently: false });
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let p = 0, i = 0; p < w*h; p++, i += 4){
+    const g = gray[p];
+    out[i] = out[i+1] = out[i+2] = g;
+    out[i+3] = 255;
+  }
+  gctx.putImageData(new ImageData(out, w, h), 0, 0);
+
+  _snapEdgeCache = { canvas: currentCanvas, w, h, gx, gy, grayCanvas, t: now };
+  return _snapEdgeCache;
+}
+
+function _edgeAt(buf, x, y){
+  const w = imgW, h = imgH;
+  x = Math.max(0, Math.min(w - 1, x|0));
+  y = Math.max(0, Math.min(h - 1, y|0));
+  return buf[y * w + x] || 0;
+}
+
+// Strength functions used by the snapper.
+// On the edge map these are already "strength", so we only scale by aggressiveness.
+function edgeStrengthX(x, y){
+  const e = _getSnapEdgeBuffers();
+  if (!e || !e.gx) return 0;
+  return _edgeAt(e.gx, x, y) * _edgeAgg() / 40; // scale to roughly match previous numeric ranges
+}
+
+function edgeStrengthY(x, y){
+  const e = _getSnapEdgeBuffers();
+  if (!e || !e.gy) return 0;
+  return _edgeAt(e.gy, x, y) * _edgeAgg() / 40;
+}
+
+// --- Snap-to-border (manual measuring helper) ---
+// This intentionally does NOT "auto measure". It only nudges the user's click/hover to a nearby strong edge.
+const SNAP_SEARCH_PX = 90;         // how far (in image pixels) to search from the cursor
+const BASE_SNAP_MIN_STRENGTH = 2.8;      // lower = more eager snapping (helps colourful inner borders)
+const SNAP_MIN_EDGE_STRENGTH = 4.0; // base minimum edge strength (scaled by slider)
+const SNAP_MAX_JUMP_PX = 15;       // don't snap if it would jump further than this       // don't snap if it would jump further than this
+const SNAP_BAND_SPAN_PX = 34;      // sample +/- this along the axis to tolerate curvature      // sample +/- this along the axis to tolerate curvature
+const SNAP_BAND_STEP_PX = 5;       // step for band sampling       // step for band sampling
+const SNAP_DIST_PENALTY = 0.75;
+  // Jitter control for snapping (least-annoying combo)
+  const SNAP_TIE_EPS = 0.25;            // if scores are within this, prefer the closer edge
+  const SNAP_SMOOTH_ALPHA = 0.38;       // 0..1, higher = snappier, lower = smoother
+  const SNAP_SMOOTH_SNAP_PX = 18;       // if the snap target jumps more than this, snap immediately (no easing)
+  let _snapHoverSmoothed = null;        // smoothed hover point in image space (for always-follows-snap preview)
+  let _snapHoverRaw = null;             // last raw snapped hover (pre-smoothing)
+    // higher = prefers closer edges more strongly    // higher = prefers closer edges more strongly
+
+function _collectEdgeCandidates1D(pos0, pos1, strengthAt){
+  // Scan along a 1D axis and return candidate peaks using a local adaptive threshold.
+  // Improvements for colourful cards:
+  // - light smoothing to suppress artwork texture noise
+  // - thresholding computed on smoothed values
+  const samples = [];
+  const vals = [];
+
+  for (let p = pos0; p <= pos1; p++){
+    const v = strengthAt(p);
+    samples.push({p, v});
+    vals.push(v);
+  }
+
+  // Smooth strengths a bit. Border edges are spatially consistent; texture spikes are not.
+  const smoothVals = (function(){
+    const out = new Array(vals.length);
+    const win = 5;           // odd window size
+    const half = (win-1)/2;
+    for (let i = 0; i < vals.length; i++){
+      let sum = 0, cnt = 0;
+      for (let k = -half; k <= half; k++){
+        const j = i + k;
+        if (j >= 0 && j < vals.length){ sum += vals[j]; cnt++; }
+      }
+      out[i] = cnt ? (sum / cnt) : vals[i];
+    }
+    return out;
+  })();
+
+  // Robust baseline: median + MAD (less sensitive to texture spikes)
+  function _median(arr){
+    if (!arr.length) return 0;
+    const a = arr.slice().sort((x,y)=>x-y);
+    const mid = Math.floor(a.length/2);
+    return (a.length % 2) ? a[mid] : (a[mid-1] + a[mid]) / 2;
+  }
+
+  const med = _median(smoothVals);
+  const absDev = smoothVals.map(v=>Math.abs(v - med));
+  const mad = _median(absDev);
+  const scale = (mad * 1.4826) + 1e-6; // ~stddev for normal noise
+
+  // Slider-aware z-threshold. Higher aggressiveness => lower z needed.
+  const zMin = clamp(2.0 / _edgeAgg(), 0.7, 3.0);
+
+  // Hard cutoff (legacy) and adaptive cutoff (local). Use the easier one.
+  const hardCut = _snapMinStrength();
+  const adaptiveCut = med + (zMin * scale);
+  const cut = Math.min(hardCut, adaptiveCut);
+
+  const cand = [];
+  let inCluster = false;
+  let bestPos = null;
+  let bestVal = -Infinity;      // raw (unsmoothed) strength
+  let bestSmooth = -Infinity;   // smoothed strength
+
+  for (let i = 0; i < samples.length; i++){
+    const s = samples[i];
+    const p = s.p;
+    const v = s.v;
+    const vs = smoothVals[i];
+
+    if (vs >= cut){
+      if (!inCluster){
+        inCluster = true;
+        bestPos = p;
+        bestVal = v;
+        bestSmooth = vs;
+      } else {
+        // Prefer stronger smoothed peak; tie break with raw strength.
+        if (vs > bestSmooth || (Math.abs(vs - bestSmooth) < 1e-6 && v > bestVal)){
+          bestSmooth = vs;
+          bestVal = v;
+          bestPos = p;
+        }
+      }
+    } else {
+      if (inCluster){
+        const z = (bestSmooth - med) / scale;
+        cand.push({ pos: bestPos, strength: bestVal, val: bestVal, z });
+        inCluster = false;
+        bestPos = null;
+        bestVal = -Infinity;
+        bestSmooth = -Infinity;
+      }
+    }
+  }
+  if (inCluster){
+    const z = (bestSmooth - med) / scale;
+    cand.push({ pos: bestPos, strength: bestVal, val: bestVal, z });
+  }
+  return cand;
+}
+
+
+function _pickNearestCandidate(candidates, cursorPos){
+  if (!candidates || candidates.length === 0) return null;
+  let best = null;
+  let bestDist = Infinity;
+  for (const c of candidates){
+    const d = Math.abs(c.pos - cursorPos);
+    if (d < bestDist){
+      bestDist = d;
+      best = c;
+    }
+  }
+  // refuse huge jumps
+  if (best && bestDist <= SNAP_MAX_JUMP_PX) return best;
+  return null;
+}
+
+
+function snapPointToBorder(pt, axis, anchor){
+  // Snap the moving point to the nearest strong vertical/horizontal edge *using a small band*.
+  // This makes snapping feel real, even when the line is slightly curved or the photo is skewed.
+  // axis: "lr" => snap X (vertical edges), "tb" => snap Y (horizontal edges)
+  if (!currentCanvas || !pt) return pt;
+
+  const px = clamp(Math.round(pt.x), 0, imgW-1);
+  const py = clamp(Math.round(pt.y), 0, imgH-1);
+
+  // Band sampling settings (tuned for phone pics and mild curvature)
+  const bandSpan = (anchor ? 14 : SNAP_BAND_SPAN_PX);     // sample +/- this far along the axis
+  const bandStep = (anchor ? 2 : SNAP_BAND_STEP_PX);     // step along the axis
+
+  const searchPx = SNAP_SEARCH_PX;        // how far to look for an edge (perpendicular)
+
+  // After the first click, restrict snapping to the measurement axis band and make subtle inner borders easier to catch.
+
+  function edgeStrengthXBand(x, y){
+    const yy = clamp(Math.round(y), 0, imgH-1);
+    const y0 = clamp(yy - 1, 0, imgH-1);
+    const y1 = clamp(yy + 1, 0, imgH-1);
+    return (edgeStrengthX(x, y0) + edgeStrengthX(x, yy) + edgeStrengthX(x, y1)) / 3;
+  }
+  function edgeStrengthYBand(x, y){
+    const xx = clamp(Math.round(x), 0, imgW-1);
+    const x0 = clamp(xx - 1, 0, imgW-1);
+    const x1 = clamp(xx + 1, 0, imgW-1);
+    return (edgeStrengthY(xx, y) + edgeStrengthY(x0, y) + edgeStrengthY(x1, y)) / 3;
+  }
+
+  function weightedMedian(samples){
+    if (!samples.length) return null;
+    const arr = samples.slice().sort((a,b)=>a.pos-b.pos);
+    const total = arr.reduce((s,o)=>s+o.w,0);
+    let acc = 0;
+    for (const o of arr){
+      acc += o.w;
+      if (acc >= total*0.5) return o.pos;
+    }
+    return arr[arr.length-1].pos;
+  }
+
+  // Helper: pick best candidate near "target" from a 1D scan
+  function bestCandidateNear(cands, target){
+    if (!cands || !cands.length) return null;
+    let best = null;
+    let bestScore = -Infinity;
+    let bestDist = Infinity;
+
+    for (const c of cands){
+      const d = Math.abs(c.pos - target);
+      // Prefer closer, but allow a slightly farther candidate if it's much stronger.
+      const score = ((c.strength ?? c.val) * 1.0) - (d * SNAP_DIST_PENALTY);
+
+      // Stable tie-breaker: if scores are very close, choose the nearer candidate.
+      if (score > bestScore + SNAP_TIE_EPS){
+        bestScore = score;
+        bestDist = d;
+        best = c;
+      } else if (Math.abs(score - bestScore) <= SNAP_TIE_EPS){
+        if (d < bestDist){
+          bestScore = score;
+          bestDist = d;
+          best = c;
+        }
+      }
+    }
+
+    // Enforce "must actually move a bit" to avoid micro-jitter
+    if (best && Math.abs(best.pos - target) < 1) return null;
+    return best;
+  }
+
+  if (axis === "lr"){
+    const yCenter = clamp(Math.round(anchor?.y ?? py), 0, imgH-1);
+    const x0 = clamp(px - searchPx, 0, imgW-1);
+    const x1 = clamp(px + searchPx, 0, imgW-1);
+
+    const samples = [];
+    for (let dy = -bandSpan; dy <= bandSpan; dy += bandStep){
+      const yy = clamp(yCenter + dy, 0, imgH-1);
+      const cands = _collectEdgeCandidates1D(x0, x1, (xx)=> edgeStrengthXBand(xx, yy));
+      const picked = bestCandidateNear(cands, px);
+      if (picked){
+        samples.push({ pos: picked.pos, w: picked.strength });
+      }
+    }
+
+    const xSnap = weightedMedian(samples);
+    if (xSnap == null) return pt;
+
+    const jump = Math.abs(xSnap - px);
+    if (jump > SNAP_MAX_JUMP_PX) return pt;
+
+    return { x: xSnap, y: yCenter };
+  } else {
+    const xCenter = clamp(Math.round(anchor?.x ?? px), 0, imgW-1);
+    const y0 = clamp(py - searchPx, 0, imgH-1);
+    const y1 = clamp(py + searchPx, 0, imgH-1);
+
+    const samples = [];
+    for (let dx = -bandSpan; dx <= bandSpan; dx += bandStep){
+      const xx = clamp(xCenter + dx, 0, imgW-1);
+      const cands = _collectEdgeCandidates1D(y0, y1, (yy)=> edgeStrengthYBand(xx, yy));
+      const picked = bestCandidateNear(cands, py);
+      if (picked){
+        samples.push({ pos: picked.pos, w: picked.strength });
+      }
+    }
+
+    const ySnap = weightedMedian(samples);
+    if (ySnap == null) return pt;
+
+    const jump = Math.abs(ySnap - py);
+    if (jump > SNAP_MAX_JUMP_PX) return pt;
+
+    return { x: xCenter, y: ySnap };
+  }
+}
+
   function centreImage(){
     const r = wrap.getBoundingClientRect();
     if (!imgW || !imgH) return;
@@ -803,16 +1295,16 @@ window.addEventListener("keydown", (e)=>{
     const loaded = !!currentCanvas;
     resetBtn.disabled = !loaded;
     exportBtn.disabled = !(
-  sides.front.currentCanvas && sides.back.currentCanvas &&
-  measureSides.front.lr.result && measureSides.front.tb.result &&
-  measureSides.back.lr.result && measureSides.back.tb.result
-);
-    geomModeSel.disabled = !loaded;
+      (sides.front.currentCanvas && measureSides.front.lr.result && measureSides.front.tb.result) ||
+      (sides.back.currentCanvas && measureSides.back.lr.result && measureSides.back.tb.result)
+    );
+geomModeSel.disabled = !loaded;
     geomApply.disabled = !loaded || !geomCapturing || ((geomMode === "rotate") ? (rotPts.length!==2) : (perspLines.length!==4 || !!perspTemp));
     geomCancel.disabled = !loaded || !geomCapturing;
 
     measureLR.disabled = !loaded || geomCapturing;
     measureTB.disabled = !loaded || geomCapturing;
+    const hasPersp = !!getPerspRect();
     clearMarks.disabled = !loaded;
     clearMarksAll.disabled = !loaded;
 
@@ -939,7 +1431,7 @@ ${bothDone ? "\nReady to export PDF." : ""}`;
     ctx.scale(zoom, zoom);
     ctx.imageSmoothingEnabled = false;
     ctx.imageSmoothingQuality = "low";
-    ctx.drawImage(currentCanvas, 0, 0);
+    ctx.drawImage(_getSnapDisplayCanvas() || currentCanvas, 0, 0);
     ctx.restore();
 
     // Pixel hover highlight (only really visible when zoomed in)
@@ -949,12 +1441,52 @@ ${bothDone ? "\nReady to export PDF." : ""}`;
       // Work out the candidate point that would be stored on click
       let cand = pointerImgPt;
 
-      if (!geomCapturing){
-        const pts = MS()[activeAxis].pts;
-        if (pts && pts.length >= 1){
-          cand = projectToAxis(pts[0], pointerImgPt, activeAxis);
-        }
+if (!geomCapturing){
+  const pts = MS()[activeAxis].pts;
+  const anchor = (pts && pts.length >= 1) ? pts[0] : null;
+
+  // First lock to axis (as before)
+  if (anchor){
+    cand = projectToAxis(anchor, pointerImgPt, activeAxis);
+  }
+
+  // Then optionally snap the hover point to a nearby strong border edge
+  if (snapToBorderEnabled){
+    const base = anchor ? cand : pointerImgPt;
+    const snapAnchor = anchor || base;
+
+    // Raw snapped point (no smoothing)
+    const rawSnap = snapPointToBorder(base, activeAxis, snapAnchor);
+    _snapHoverRaw = rawSnap;
+
+    // Smooth the hover snap so it always follows, but doesn't jitter.
+    if (!_snapHoverSmoothed){
+      _snapHoverSmoothed = { x: rawSnap.x, y: rawSnap.y };
+    } else {
+      const dx = rawSnap.x - _snapHoverSmoothed.x;
+      const dy = rawSnap.y - _snapHoverSmoothed.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > SNAP_SMOOTH_SNAP_PX){
+        // Large change (likely switching edges): jump to target so it doesn't "lag behind".
+        _snapHoverSmoothed.x = rawSnap.x;
+        _snapHoverSmoothed.y = rawSnap.y;
+      } else {
+        // Gentle easing
+        _snapHoverSmoothed.x += dx * SNAP_SMOOTH_ALPHA;
+        _snapHoverSmoothed.y += dy * SNAP_SMOOTH_ALPHA;
       }
+    }
+
+    cand = { x: _snapHoverSmoothed.x, y: _snapHoverSmoothed.y };
+  } else {
+    _snapHoverRaw = null;
+    _snapHoverSmoothed = null;
+  }
+} else {
+  _snapHoverRaw = null;
+  _snapHoverSmoothed = null;
+}
 
       const px = Math.floor(cand.x);
       const py = Math.floor(cand.y);
@@ -1045,7 +1577,10 @@ ${bothDone ? "\nReady to export PDF." : ""}`;
       if (pointerImgPt && rubberBandAllowed) {
         const a0 = pts[0];
         const last = pts[pts.length - 1];
-        const proj = projectToAxis(a0, pointerImgPt, activeAxis);
+        let proj = projectToAxis(a0, pointerImgPt, activeAxis);
+        if (snapToBorderEnabled){
+          proj = snapPointToBorder(proj, activeAxis, a0);
+        }
         // dashed preview aligned to guide + solid fill
         drawLine(imgToScreen(last), imgToScreen(proj), (activeAxis==="tb" ? (colors.guideTB||colors.guide) : colors.guide), 2.8, [14,10]);
         drawLine(imgToScreen(last), imgToScreen(proj), (activeAxis==="tb" ? (colors.solidTB||colors.solid) : colors.solid), 4, null);
@@ -1136,144 +1671,86 @@ for (const key of ["lr","tb"]){
     };
   }
 
-  function updateResults(){
-    const lr = MS().lr.result;
-    const tb = MS().tb.result;
-
-    if (lr && lr.ok){
-      lrPct.textContent = `${Math.round(lr.big)}/${Math.round(lr.small)}`;
-      lrInfo.textContent = lr.text.replaceAll("LR", "Left/Right");
-    } else {
-      lrPct.textContent = "–";
-      lrInfo.textContent = "Not measured.";
-    }
-
-    if (tb && tb.ok){
-      tbPct.textContent = `${Math.round(tb.big)}/${Math.round(tb.small)}`;
-      tbInfo.textContent = tb.text.replaceAll("TB", "Top/Bottom");
-    } else {
-      tbPct.textContent = "–";
-      tbInfo.textContent = "Not measured.";
-    }
-  }
-
+  // Update the Results panel for the active side
+  
   function finishAxisIfReady(axis){
-    if (MS()[axis].pts.length === 4){
-      MS()[axis].result = computeAxis(axis);
-      updateResults();
-      // Auto switch to the other axis if not done
-      const other = (axis==="lr") ? "tb" : "lr";
-      if (MS()[other].pts.length < 4) activeAxis = other;
-      syncUI();
-      draw();
+    // Called when the user has placed 4 points for an axis.
+    const pts = MS()[axis]?.pts;
+    if (!pts || pts.length !== 4) return;
+
+    const res = computeAxis(axis);
+    MS()[axis].result = (res && res.ok) ? res : null;
+
+    // Auto-switch to the other axis when one measurement is complete (if the other isn't done yet).
+    const other = (axis === "lr") ? "tb" : "lr";
+    const otherDone = (MS()[other]?.pts?.length === 4);
+
+    if (!otherDone){
+      activeAxis = other;
+      // Reset snap smoothing so the new axis doesn't inherit the previous eased point.
+      _snapHoverRaw = null;
+      _snapHoverSmoothed = null;
     }
-  }
-
-  // ---------- Geometry math for perspective ----------
-  function lineIntersection(L1, L2){
-    const x1=L1.a.x, y1=L1.a.y, x2=L1.b.x, y2=L1.b.y;
-    const x3=L2.a.x, y3=L2.a.y, x4=L2.b.x, y4=L2.b.y;
-    const den = (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4);
-    if (Math.abs(den) < 1e-9) return null;
-    const px = ((x1*y2 - y1*x2)*(x3-x4) - (x1-x2)*(x3*y4 - y3*x4)) / den;
-    const py = ((x1*y2 - y1*x2)*(y3-y4) - (y1-y2)*(x3*y4 - y3*x4)) / den;
-    return {x:px, y:py};
-  }
-
-  function solveLinear(A, b){
-    const n = A.length;
-    const M = A.map((row,i)=>row.slice().concat([b[i]]));
-    for (let col=0; col<n; col++){
-      let pivot = col;
-      for (let r=col+1;r<n;r++){
-        if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
-      }
-      if (Math.abs(M[pivot][col]) < 1e-12) return null;
-      if (pivot !== col){ const tmp=M[col]; M[col]=M[pivot]; M[pivot]=tmp; }
-      const div = M[col][col];
-      for (let c=col; c<=n; c++) M[col][c] /= div;
-      for (let r=0;r<n;r++){
-        if (r===col) continue;
-        const factor = M[r][col];
-        for (let c=col; c<=n; c++) M[r][c] -= factor*M[col][c];
-      }
+    // If both axes are measured, automatically return to colour view by turning off snap-to-border.
+    // Users typically only need edge view while placing points.
+    const bothDoneNow = (MS().lr?.pts?.length === 4) && (MS().tb?.pts?.length === 4);
+    if (bothDoneNow && snapToBorderEnabled){
+      snapToBorderEnabled = false;
+      if (snapToBorderToggle) snapToBorderToggle.checked = false;
+      _invalidateSnapCaches();
     }
-    return M.map(row=>row[n]);
-  }
 
-  function homographyFrom4(srcPts, dstPts){
-    // Solve for H mapping dst -> src (inverse map)
-    const A = [];
-    const b = [];
-    for (let i=0;i<4;i++){
-      const X = dstPts[i].x, Y = dstPts[i].y;
-      const x = srcPts[i].x, y = srcPts[i].y;
-      A.push([X, Y, 1, 0, 0, 0, -x*X, -x*Y]); b.push(x);
-      A.push([0, 0, 0, X, Y, 1, -y*X, -y*Y]); b.push(y);
-    }
-    const h = solveLinear(A, b);
-    if (!h) return null;
-    return { h11:h[0], h12:h[1], h13:h[2], h21:h[3], h22:h[4], h23:h[5], h31:h[6], h32:h[7] };
-  }
-  function applyHomography(H, X, Y){
-    const den = H.h31*X + H.h32*Y + 1;
-    return { x: (H.h11*X + H.h12*Y + H.h13)/den, y: (H.h21*X + H.h22*Y + H.h23)/den };
-  }
-
-  function sampleBilinear(imgData, w, h, x, y){
-    if (x < 0 || y < 0 || x >= w-1 || y >= h-1) return [0,0,0,0];
-    const x0 = Math.floor(x), y0 = Math.floor(y);
-    const x1 = x0 + 1, y1 = y0 + 1;
-    const dx = x - x0, dy = y - y0;
-    const idx = (xx,yy)=> (yy*w + xx)*4;
-    const d = imgData.data;
-    const i00 = idx(x0,y0), i10=idx(x1,y0), i01=idx(x0,y1), i11=idx(x1,y1);
-    const out = [0,0,0,0];
-    for (let c=0;c<4;c++){
-      const v00=d[i00+c], v10=d[i10+c], v01=d[i01+c], v11=d[i11+c];
-      const v0 = v00*(1-dx) + v10*dx;
-      const v1 = v01*(1-dx) + v11*dx;
-      out[c] = v0*(1-dy) + v1*dy;
-    }
-    return out;
-  }
-
-  function applyRotate(){
-    if (rotPts.length !== 2) return;
-    const a = rotPts[0], b = rotPts[1];
-
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const ang = Math.atan2(dy, dx);
-
-    // Snap to the nearest axis so drawing a vertical border doesn't rotate the card 90°
-    const isVertical = Math.abs(dy) > Math.abs(dx);
-    const target = isVertical ? (Math.PI / 2) : 0;
-    const rot = target - ang; // rotate line onto target axis
-    const cos = Math.cos(rot), sin = Math.sin(rot);
-    const cx = imgW/2, cy = imgH/2;
-
-    const outC = document.createElement("canvas");
-    outC.width = imgW; outC.height = imgH;
-    const octx = outC.getContext("2d");
-    octx.clearRect(0,0,imgW,imgH);
-    octx.save();
-    octx.translate(cx,cy);
-    octx.rotate(rot);
-    octx.translate(-cx,-cy);
-    octx.drawImage(currentCanvas,0,0);
-    octx.restore();
-    currentCanvas = outC;
-
-    // reset
-    geomCapturing = false;
-    rotPts = [];
-    clearAll();
-    centreImage();
-    setToast("Rotation applied.");
     syncUI();
+    updateResults();
+    updateStatus();
     draw();
   }
+
+	function updateResults(){
+    // If no image, reset UI
+    if (!currentCanvas){
+      if (lrPct) lrPct.textContent = "–";
+      if (tbPct) tbPct.textContent = "–";
+      if (lrInfo) lrInfo.textContent = "Not measured.";
+      if (tbInfo) tbInfo.textContent = "Not measured.";
+      return;
+    }
+
+    // Recompute results when a full set of points exists
+    for (const axis of ["lr","tb"]){
+      const pts = MS()[axis].pts;
+      if (pts && pts.length === 4){
+        const res = computeAxis(axis);
+        MS()[axis].result = (res && res.ok) ? res : null;
+      } else {
+        MS()[axis].result = null;
+      }
+    }
+
+    const lrRes = MS().lr.result;
+    const tbRes = MS().tb.result;
+
+    if (lrRes && lrRes.ok){
+      if (lrPct) lrPct.textContent = `${Math.round(lrRes.big)}/${Math.round(lrRes.small)}`;
+      if (lrInfo) lrInfo.textContent = lrRes.text;
+    } else {
+      if (lrPct) lrPct.textContent = "–";
+      if (lrInfo) lrInfo.textContent = "Not measured.";
+    }
+
+    if (tbRes && tbRes.ok){
+      if (tbPct) tbPct.textContent = `${Math.round(tbRes.big)}/${Math.round(tbRes.small)}`;
+      if (tbInfo) tbInfo.textContent = tbRes.text;
+    } else {
+      if (tbPct) tbPct.textContent = "–";
+      if (tbInfo) tbInfo.textContent = "Not measured.";
+    }
+  }
+
+
+  
+
+  
 
   function applyPerspective(){
     if (perspLines.length !== 4 || perspTemp) return;
@@ -1382,9 +1859,20 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
     geomCapturing = false;
     perspLines = [];
     perspTemp = null;
+
+    // Store the exact outer rectangle we mapped the card into.
+    // This is "known truth" from the perspective step and is used for auto-measure.
+    setPerspRect(activeSide, { ox, oy, W, H });
+
+    // Always clear previous manual measurements after a geometry warp
     clearAll();
     centreImage();
-    setToast("Perspective applied (63×88).");
+
+    // Optional one-click auto-measure is available after perspective.
+    // Users can still measure manually.
+    setToast("Perspective applied. Click Auto measure, or measure manually.");
+
+    saveActiveSide();
     syncUI();
     draw();
   }
@@ -1398,16 +1886,18 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
     const img = new Image();
     img.onload = ()=>{
       try{
+      fileInput.value = "";
+
       imgW = img.naturalWidth; saveActiveSide();
       imgH = img.naturalHeight;
 
       baseCanvas = document.createElement("canvas");
       baseCanvas.width = imgW; baseCanvas.height = imgH;
-      baseCanvas.getContext("2d").drawImage(img,0,0);
+      baseCanvas.getContext("2d", { willReadFrequently: true }).drawImage(img,0,0);
 
       currentCanvas = document.createElement("canvas");
       currentCanvas.width = imgW; currentCanvas.height = imgH;
-      currentCanvas.getContext("2d").drawImage(img,0,0);
+      currentCanvas.getContext("2d", { willReadFrequently: true }).drawImage(img,0,0);
 
       URL.revokeObjectURL(url);
       zoom = 1; panX = 0; panY = 0;
@@ -1424,6 +1914,7 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
       syncUI();
       saveActiveSide();
       setToast(`Image loaded (${activeSide}): ${imgW}×${imgH}`);
+      _invalidateSnapCaches();
       draw();
       }catch(err){
         console.error(err);
@@ -1435,11 +1926,12 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
   });
 
   resetBtn.addEventListener("click", ()=>{
+    _invalidateSnapCaches();
     saveActiveSide();
     if (!baseCanvas) return;
     currentCanvas = document.createElement("canvas");
     currentCanvas.width = imgW; currentCanvas.height = imgH;
-    currentCanvas.getContext("2d").drawImage(baseCanvas,0,0);
+    currentCanvas.getContext("2d", { willReadFrequently: true }).drawImage(baseCanvas,0,0);
     geomMode = "none";
     geomModeSel.value = "none";
     geomCapturing = false;
@@ -1591,6 +2083,8 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
   wrap.addEventListener("mouseleave", ()=>{
     pointerImgPt = null;
     hoverImgPt = null;
+    _snapHoverRaw = null;
+    _snapHoverSmoothed = null;
     draw();
   });
 
@@ -1745,13 +2239,34 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
     const pts = MS()[activeAxis].pts;
     if (pts.length >= 4) return;
 
-    // Snap ALL subsequent clicks to the axis defined by the first click for this measurement set.
-    let snapped = raw;
-    if (pts.length >= 1) {
-      snapped = projectToAxis(pts[0], raw, activeAxis);
+    // Optional: snap click to a likely border edge (toggleable)
+    const anchor = (pts.length >= 1) ? pts[0] : null;
+    let raw2 = raw;
+    if (snapToBorderEnabled){
+      // For LR we search along X at the anchored Y. For TB we search along Y at the anchored X.
+      const constrained = anchor ? projectToAxis(anchor, raw, activeAxis) : raw;
+      const snappedNow = snapPointToBorder(constrained, activeAxis, anchor || constrained);
+
+      // Prefer the smoothed hover snap if it's available and very close to this click location,
+      // so the committed point matches what the user visually saw.
+      if (_snapHoverSmoothed){
+        const dd = Math.hypot(_snapHoverSmoothed.x - snappedNow.x, _snapHoverSmoothed.y - snappedNow.y);
+        if (dd <= 8){
+          raw2 = { x: _snapHoverSmoothed.x, y: _snapHoverSmoothed.y };
+        } else {
+          raw2 = snappedNow;
+        }
+      } else {
+        raw2 = snappedNow;
+      }
     }
 
-    // If user switches axis mid-way, that's allowed
+    // Snap ALL subsequent clicks to the axis defined by the first click for this measurement set.
+    let snapped = raw2;
+    if (pts.length >= 1) {
+      snapped = projectToAxis(pts[0], raw2, activeAxis);
+    }
+// If user switches axis mid-way, that's allowed
     pts.push(snapped);
     MS()[activeAxis].result = null;
 
@@ -1780,8 +2295,11 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
     const f = measureSides.front;
     const b = measureSides.back;
 
-    if (!(f.lr.result && f.tb.result && b.lr.result && b.tb.result)) {
-      setToast("Measure both Front and Back before exporting.");
+    const frontReady = !!(sides.front.currentCanvas && f.lr.result && f.tb.result);
+    const backReady  = !!(sides.back.currentCanvas  && b.lr.result && b.tb.result);
+
+    if (!frontReady && !backReady) {
+      setToast("Measure Front or Back before exporting.");
       return;
     }
 
@@ -1948,10 +2466,9 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
     info.textContent = "Exported: " + new Date().toLocaleString() + " | Aspect ratio: 63x88 mm";
     body.appendChild(info);
 
-    body.appendChild(buildPage("front","Front"));
-    body.appendChild(buildPage("back","Back"));
-
-    html.appendChild(head);
+    if (frontReady) body.appendChild(buildPage("front","Front"));
+    if (backReady)  body.appendChild(buildPage("back","Back"));
+html.appendChild(head);
     html.appendChild(body);
     d.appendChild(html);
     d.close();
