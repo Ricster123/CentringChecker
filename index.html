@@ -371,9 +371,7 @@
               <option value="persp">Perspective (Pokémon 63×88)</option>
             </select>
             <div class="hint" id="geomHint">Load an image to begin.</div>
-            <div class="row">
-              <button class="btn primary" id="geomStart" disabled>Start</button>
-              <button class="btn" id="geomApply" disabled>Apply</button>
+            <div class="row">              <button class="btn" id="geomApply" disabled>Apply</button>
               <button class="btn ghost" id="geomCancel" disabled>Cancel</button>
             </div>
           </div>
@@ -466,7 +464,7 @@
       <div class="modal-section">
         <div class="modal-h">3) Geometry correction (optional)</div>
         <ul class="modal-list">
-          <li>Select a mode under <b>Geometry correction</b> then press <b>Start</b>.</li>
+          <li>Select a mode under <b>Geometry correction</b> to start immediately.</li>
           <li><b>Rotate only</b>: click 2 points along a border, then press <b>Apply</b>.</li>
           <li><b>Perspective</b>: draw 4 short lines in order <b>Top, Right, Bottom, Left</b> (8 clicks total), then <b>Apply</b>.</li>
         </ul>
@@ -522,7 +520,6 @@
   const geomHint = document.getElementById("geomHint");
   const geomCard = document.getElementById("geomCard");
   const measureCard = document.getElementById("measureCard");
-  const geomStart = document.getElementById("geomStart");
   const geomApply = document.getElementById("geomApply");
   const geomCancel = document.getElementById("geomCancel");
 
@@ -811,7 +808,6 @@ window.addEventListener("keydown", (e)=>{
   measureSides.back.lr.result && measureSides.back.tb.result
 );
     geomModeSel.disabled = !loaded;
-    geomStart.disabled = !loaded || geomMode === "none";
     geomApply.disabled = !loaded || !geomCapturing || ((geomMode === "rotate") ? (rotPts.length!==2) : (perspLines.length!==4 || !!perspTemp));
     geomCancel.disabled = !loaded || !geomCapturing;
 
@@ -1282,10 +1278,41 @@ for (const key of ["lr","tb"]){
   function applyPerspective(){
     if (perspLines.length !== 4 || perspTemp) return;
     const top = perspLines[0], right = perspLines[1], bottom = perspLines[2], left = perspLines[3];
-    const TL = lineIntersection(top, left);
-    const TR = lineIntersection(top, right);
-    const BR = lineIntersection(bottom, right);
-    const BL = lineIntersection(bottom, left);
+
+// Auto-rotate using the LEFT border line so it becomes vertical before perspective warp.
+// This makes the perspective correction also straighten the card.
+const lc = left.a, ld = left.b;
+const angLeft = Math.atan2(ld.y - lc.y, ld.x - lc.x);   // left edge direction
+const rot = (Math.PI / 2) - angLeft;                    // rotate onto vertical
+const cosR = Math.cos(rot), sinR = Math.sin(rot);
+const cx = imgW/2, cy = imgH/2;
+
+function rotPt(p){
+  const x = p.x - cx, y = p.y - cy;
+  return { x: (x*cosR - y*sinR) + cx, y: (x*sinR + y*cosR) + cy };
+}
+
+// Rotate the source image into a temporary canvas (same dimensions)
+const rotC = document.createElement("canvas");
+rotC.width = imgW; rotC.height = imgH;
+const rctx = rotC.getContext("2d");
+rctx.clearRect(0,0,imgW,imgH);
+rctx.save();
+rctx.translate(cx,cy);
+rctx.rotate(rot);
+rctx.translate(-cx,-cy);
+rctx.drawImage(currentCanvas,0,0);
+rctx.restore();
+
+// Rotate the captured border lines into the same coordinate space
+const topR    = { a: rotPt(top.a),    b: rotPt(top.b)    };
+const rightR  = { a: rotPt(right.a),  b: rotPt(right.b)  };
+const bottomR = { a: rotPt(bottom.a), b: rotPt(bottom.b) };
+const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
+    const TL = lineIntersection(topR, leftR);
+    const TR = lineIntersection(topR, rightR);
+    const BR = lineIntersection(bottomR, rightR);
+    const BL = lineIntersection(bottomR, leftR);
     if (!TL || !TR || !BR || !BL){
       setToast("Could not intersect lines. Try again.");
       return;
@@ -1330,7 +1357,7 @@ for (const key of ["lr","tb"]){
     }
 
     // read source pixels
-    const sctx = currentCanvas.getContext("2d", {willReadFrequently:true});
+    const sctx = rotC.getContext("2d", {willReadFrequently:true});
     const srcImg = sctx.getImageData(0,0,imgW,imgH);
 
     const outC = document.createElement("canvas");
@@ -1428,26 +1455,30 @@ for (const key of ["lr","tb"]){
 
 
   // (Removed broken legacy single-side export block)
-
-
   // ---------- Geometry UI ----------
+  // Auto-start geometry capture when a mode is selected (no separate Start button)
   geomModeSel.addEventListener("change", ()=>{
     geomMode = geomModeSel.value;
-    geomCapturing = false;
+
+    // Always reset any in-progress capture when switching modes
     rotPts = [];
-    perspLines = []; perspTemp = null;
+    perspLines = [];
+    perspTemp = null;
+
+    if (!currentCanvas || geomMode === "none"){
+      // None selected (or no image loaded): ensure capture is off
+      geomCapturing = false;
+    } else {
+      // Mode selected: start capture immediately
+      geomCapturing = true;
+      setToast(`Geometry: ${geomMode === "rotate" ? "Rotate" : "Perspective"} capture started.`);
+    }
+
     syncUI();
     draw();
   });
-  geomStart.addEventListener("click", ()=>{
-    if (geomMode === "none") return;
-    geomCapturing = true;
-    rotPts = [];
-    perspLines = []; perspTemp = null;
-    setToast("Capture started.");
-    syncUI();
-    draw();
-  });
+
+
   geomCancel.addEventListener("click", ()=>{
     geomCapturing = false;
     rotPts = [];
@@ -1787,6 +1818,86 @@ for (const key of ["lr","tb"]){
       "@media print{body{margin:12mm;} img{max-height:150mm;}}";
     head.appendChild(style);
 
+    // --- Render an "annotated" image for the PDF (reported issue: overlay lines missing) ---
+    // The on-screen overlays are drawn to the VIEW canvas in screen coords.
+    // The PDF export embeds s.currentCanvas only, which contains *no overlays*.
+    // Fix: build a temporary image-space canvas and draw the measurement overlays onto it.
+    function annotatedDataURL(sideKey){
+      const s = sides[sideKey];
+      const m = measureSides[sideKey];
+      if (!s || !s.currentCanvas) return "";
+
+      const src = s.currentCanvas;
+      const out = document.createElement("canvas");
+      out.width = src.width;
+      out.height = src.height;
+
+      const c = out.getContext("2d");
+      c.drawImage(src, 0, 0);
+
+      const colors = {
+        lr: "rgba(49,199,255,1)",
+        tb: "rgba(255,165,0,1)"
+      };
+
+      function drawLineImg(a,b,color,width=4,dash=null){
+        c.save();
+        c.strokeStyle = color;
+        c.lineWidth = width;
+        c.lineCap = "round";
+        c.lineJoin = "round";
+        if (dash) c.setLineDash(dash);
+        c.shadowColor = color;
+        c.shadowBlur = dash ? 3 : 10;
+        c.beginPath();
+        c.moveTo(a.x, a.y);
+        c.lineTo(b.x, b.y);
+        c.stroke();
+        c.restore();
+      }
+
+      function drawLabelImg(p, text, color){
+        const fs = Math.max(14, Math.round(Math.min(out.width, out.height) / 55));
+        c.save();
+        c.font = `900 ${fs}px ui-sans-serif, system-ui`;
+        c.textBaseline = "middle";
+        c.textAlign = "center";
+        // shadow/outline for readability
+        c.fillStyle = "rgba(0,0,0,0.55)";
+        c.fillText(text, p.x+1, p.y+fs+1);
+        c.fillStyle = color;
+        c.fillText(text, p.x, p.y+fs);
+        c.restore();
+      }
+
+      function drawAxis(axisKey){
+        const axis = m[axisKey];
+        if (!axis || !axis.pts || axis.pts.length === 0) return;
+
+        const col = (axisKey === "tb") ? colors.tb : colors.lr;
+        const labels = (axisKey === "tb")
+          ? ["T1","T2","B1","B2"]
+          : ["L1","L2","R1","R2"];
+
+        axis.pts.forEach((pt, i)=>{
+          drawLabelImg(pt, labels[i] || String(i+1), col);
+        });
+
+        // Draw the two measured segments (outer->inner on one side, inner->outer on the other)
+        if (axis.pts.length >= 2){
+          drawLineImg(axis.pts[0], axis.pts[1], col, 5, null);
+        }
+        if (axis.pts.length >= 4){
+          drawLineImg(axis.pts[2], axis.pts[3], col, 5, null);
+        }
+      }
+
+      drawAxis("lr");
+      drawAxis("tb");
+
+      return out.toDataURL("image/png");
+    }
+
     function buildPage(sideKey, label){
       const s = sides[sideKey];
       const m = measureSides[sideKey];
@@ -1799,7 +1910,7 @@ for (const key of ["lr","tb"]){
       page.appendChild(h);
 
       const img = d.createElement("img");
-      img.src = s.currentCanvas.toDataURL("image/png");
+      img.src = annotatedDataURL(sideKey);
       page.appendChild(img);
 
       const grid = d.createElement("div");
