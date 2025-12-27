@@ -17,6 +17,7 @@
     --accent2: rgba(49,199,255,0.18);
     --danger: #ff6b6b;
     --warn: #ffce5c;
+    --ok: #4cd964;
   }
   @media (prefers-color-scheme: light){
     :root{
@@ -195,6 +196,62 @@
     box-shadow: var(--shadow);
     touch-action: none; /* we handle pinch/pan ourselves */
   }
+
+  /* --- Edge guidance glow (shows which side needs action) --- */
+  .canvas-wrap{
+    --edgeGlow: rgba(76, 217, 100, 0.95);
+    --edgeGlowOuter: rgba(76, 217, 100, 0.55);
+    --edgeStrip: 6px;
+  }
+  .canvas-wrap::after{
+    content:"";
+    position:absolute;
+    pointer-events:none;
+    opacity:0;
+    z-index: 3;
+    transition: opacity 140ms ease;
+  }
+  /* thin glowing strip, not a big overlay */
+  .canvas-wrap.edge-left::after{
+    opacity:1;
+    top:0; bottom:0; left:0;
+    width: var(--edgeStrip);
+    border-radius:18px 0 0 18px;
+    background: var(--edgeGlow);
+    box-shadow: 0 0 16px var(--edgeGlowOuter), 0 0 34px rgba(76,217,100,0.25);
+  }
+  .canvas-wrap.edge-right::after{
+    opacity:1;
+    top:0; bottom:0; right:0;
+    width: var(--edgeStrip);
+    border-radius:0 18px 18px 0;
+    background: var(--edgeGlow);
+    box-shadow: 0 0 16px var(--edgeGlowOuter), 0 0 34px rgba(76,217,100,0.25);
+  }
+  .canvas-wrap.edge-top::after{
+    opacity:1;
+    left:0; right:0; top:0;
+    height: var(--edgeStrip);
+    border-radius:18px 18px 0 0;
+    background: var(--edgeGlow);
+    box-shadow: 0 0 16px var(--edgeGlowOuter), 0 0 34px rgba(76,217,100,0.25);
+  }
+  .canvas-wrap.edge-bottom::after{
+    opacity:1;
+    left:0; right:0; bottom:0;
+    height: var(--edgeStrip);
+    border-radius:0 0 18px 18px;
+    background: var(--edgeGlow);
+    box-shadow: 0 0 16px var(--edgeGlowOuter), 0 0 34px rgba(76,217,100,0.25);
+  }
+  .canvas-wrap.edge-all::after{
+    opacity:1;
+    inset:0;
+    border-radius:18px;
+    background: transparent;
+    box-shadow: inset 0 0 0 3px rgba(76,217,100,0.75), 0 0 18px rgba(76,217,100,0.45), 0 0 38px rgba(76,217,100,0.22);
+  }
+
   canvas{
     position:absolute;
     left:0; top:0;
@@ -205,6 +262,7 @@
   }
 
   .toast{
+    z-index: 6;
     position:absolute;
     left:12px;
     bottom:12px;
@@ -221,6 +279,7 @@
   }
   @media (prefers-color-scheme: light){
     .toast{
+    z-index: 6;
       background: rgba(255,255,255,0.78);
       color: rgba(0,0,0,0.85);
       border-color: rgba(0,0,0,0.12);
@@ -243,6 +302,30 @@
 
   .divider{ height:1px; background: var(--border); margin: 10px 0; }
 
+
+
+
+  .gradeGrid{ display:flex; flex-direction:column; gap:8px; margin-top:2px; }
+  .gradeRow{ display:grid; grid-template-columns: 14px 1fr auto; align-items:center; gap:10px; }
+  .lamp{
+    width:12px; height:12px; border-radius:50%;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.22);
+    box-shadow: 0 0 0 6px rgba(255,255,255,0.04);
+  }
+  .lamp.ok{
+    background: var(--ok);
+    border-color: color-mix(in srgb, var(--ok) 70%, #000 30%);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--ok) 26%, transparent 74%), 0 0 18px color-mix(in srgb, var(--ok) 55%, transparent 45%);
+  }
+  .lamp.bad{
+    background: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 70%, #000 30%);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 22%, transparent 78%), 0 0 18px color-mix(in srgb, var(--danger) 55%, transparent 45%);
+  }
+  .gName{ font-weight:900; }
+  .gThresh{ font-variant-numeric: tabular-nums; color: var(--muted); font-weight:850; }
+  .gradeHint{ margin-top:8px; color: var(--muted); font-size:12px; line-height:1.35; }
 
 /* --- Help modal --- */
 .modal-backdrop{
@@ -466,12 +549,33 @@
           <div class="label">Top / Bottom</div><div class="val" id="tbPct">–</div>
           <div class="sub" id="tbInfo">Not measured.</div>
         </div>
+
+        <div class="metric" id="gradeMetric">
+          <div class="label">10 threshold</div><div class="val"> </div>
+          <div class="sub">
+            <div class="gradeGrid">
+              <div class="gradeRow">
+                <span class="lamp" id="psaLamp" title="Pass/fail based on measured LR + TB"></span>
+                <span class="gName">PSA / CGC</span>
+                <span class="gThresh">55/45</span>
+              </div>
+              <div class="gradeRow">
+                <span class="lamp" id="aceLamp" title="Pass/fail based on measured LR + TB"></span>
+                <span class="gName">ACE</span>
+                <span class="gThresh">60/40</span>
+              </div>
+            </div>
+            <div class="gradeHint" id="gradeHint">Measure Left / Right and Top / Bottom to see pass or fail.</div>
+          </div>
+        </div>
+
         <div class="metric">
           <div class="label">Notes</div><div class="val"> </div>
           <div class="sub" id="notes">
             Pokémon aspect ratio: 63×88 mm (H/W ≈ 1.3968)<br/>
             Export PDF includes: annotated image, pixel counts, and centring %.<br/>
-            Tip: phone photos look best at 2× zoom from a bit further back.
+            Tip: phone photos look best at 2× zoom from a bit further back.<br/>
+            <span style="color: var(--muted);">Disclaimer: This aims to estimate centring as accurately as possible, but results depend on image quality and it can’t account for lens distortion, perspective warp, or bent or warped cards.</span>
           </div>
         </div>
 
@@ -674,9 +778,7 @@ window.addEventListener("keydown", (e)=>{
   let panY = 0;
 
   // Modes
-  let activeAxis = "lr"; // lr or tb
-
-
+  let activeAxis = "lr";
   // ===== Active side (Front/Back) and per-side image/view state =====
   let activeSide = "front";
 
@@ -814,6 +916,48 @@ window.addEventListener("keydown", (e)=>{
     clearTimeout(setToast._t);
     setToast._t = setTimeout(()=> toast.style.display="none", ms);
   }
+
+  // --- Edge guidance glow helpers ---
+  function setWrapEdgeGlow(edge){
+    if (!wrap) return;
+    const edgeClasses = ["edge-left","edge-right","edge-top","edge-bottom","edge-all"];
+    for (const c of edgeClasses) wrap.classList.remove(c);
+    if (!edge) return;
+    const cls = "edge-" + edge;
+    if (edgeClasses.includes(cls)) wrap.classList.add(cls);
+  }
+
+  function getNextEdgeHint(){
+    if (!currentCanvas) return null;
+
+    // Geometry capture has priority
+    if (geomCapturing){
+      if (geomMode === "persp"){
+        const order = ["top","right","bottom","left"];
+        const i = perspLines.length;
+        if (i >= 4 && !perspTemp) return null;
+        return order[Math.min(i, 3)] || null;
+      }
+      // Rotate: user can pick any straight border, so just glow all edges
+      if (geomMode === "rotate"){
+        return (rotPts.length < 2) ? "all" : null;
+      }
+      return null;
+    }
+
+    // Measurement guidance
+    const pts = MS()[activeAxis].pts;
+    if (!pts || pts.length >= 4) return null;
+
+    if (activeAxis === "lr"){
+      // L1, L2 => left; R1, R2 => right
+      return (pts.length < 2) ? "left" : "right";
+    } else {
+      // T1, T2 => top; B1, B2 => bottom
+      return (pts.length < 2) ? "top" : "bottom";
+    }
+  }
+
 
   window.addEventListener("error", (ev)=>{
     try{
@@ -1335,6 +1479,7 @@ geomModeSel.disabled = !loaded;
     if (!MS) return;
     if (!currentCanvas){
       statusEl.textContent = "Load an image.";
+      setWrapEdgeGlow(null);
       return;
     }
     if (geomCapturing){
@@ -1351,6 +1496,7 @@ geomModeSel.disabled = !loaded;
           statusEl.textContent = `Geometry: Perspective\nNext: ${names[i]} line (${step})\nProgress: ${perspLines.length}/4 lines`;
         }
       }
+      setWrapEdgeGlow(getNextEdgeHint());
       return;
     }
 
@@ -1374,6 +1520,10 @@ geomModeSel.disabled = !loaded;
 Next: ${nextLabel}
 Progress: LR ${MS().lr.pts.length}/4, TB ${MS().tb.pts.length}/4
 ${bothDone ? "\nReady to export PDF." : ""}`;
+
+
+    // Update the canvas edge glow hint
+    setWrapEdgeGlow(getNextEdgeHint());
   }
 
   function drawLine(a,b, color, width=3, dash=null){
@@ -1706,6 +1856,39 @@ for (const key of ["lr","tb"]){
     draw();
   }
 
+
+  function _setLamp(el, state){
+    if (!el) return;
+    el.classList.remove("ok","bad");
+    if (state === "ok") el.classList.add("ok");
+    else if (state === "bad") el.classList.add("bad");
+  }
+
+  function _updateGradeLamps(lrRes, tbRes){
+    if (!psaLamp && !aceLamp && !gradeHint) return;
+
+    if (!currentCanvas || !(lrRes && lrRes.ok) || !(tbRes && tbRes.ok)){
+      _setLamp(psaLamp, null);
+      _setLamp(aceLamp, null);
+      if (gradeHint) gradeHint.textContent = "Measure Left / Right and Top / Bottom to see pass or fail.";
+      return;
+    }
+
+    const lrSmall = lrRes.small;
+    const tbSmall = tbRes.small;
+
+    const psaOk = (lrSmall >= 45) && (tbSmall >= 45);
+    const aceOk = (lrSmall >= 40) && (tbSmall >= 40);
+
+    _setLamp(psaLamp, psaOk ? "ok" : "bad");
+    _setLamp(aceLamp, aceOk ? "ok" : "bad");
+
+    if (gradeHint){
+      const tightest = Math.min(lrSmall, tbSmall);
+      gradeHint.textContent = `Tightest side: ${Math.round(tightest)}% (needs ≥45% for PSA/CGC, ≥40% for ACE).`;
+    }
+  }
+
 	function updateResults(){
     // If no image, reset UI
     if (!currentCanvas){
@@ -1713,6 +1896,7 @@ for (const key of ["lr","tb"]){
       if (tbPct) tbPct.textContent = "–";
       if (lrInfo) lrInfo.textContent = "Not measured.";
       if (tbInfo) tbInfo.textContent = "Not measured.";
+      _updateGradeLamps(null, null);
       return;
     }
 
@@ -1745,6 +1929,8 @@ for (const key of ["lr","tb"]){
       if (tbPct) tbPct.textContent = "–";
       if (tbInfo) tbInfo.textContent = "Not measured.";
     }
+
+    _updateGradeLamps(lrRes, tbRes);
   }
 
 // --- Added: line-line intersection helper (required by applyPerspective) ---
