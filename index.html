@@ -461,12 +461,29 @@
     .snapToggle input{ accent-color: var(--accent); }
     .snapToggle span{ white-space:nowrap; }
 
+  .logo{
+  height:18px;
+  display:inline-flex;
+  align-items:center;
+}
+
+.logo img{
+  height:100%;
+  width:auto;
+  display:block;
+}
+
 </style>
 </head>
 <body>
 <div class="app">
   <div class="topbar">
-    <div class="brand"><span class="dot"></span> Is It Centered </div>
+    <div class="brand">
+  <span class="logo">
+    <img src="logo.png" alt="Is It Centered logo">
+  </span>
+  Is It Centered
+</div>
     <div class="top-actions">
 
       <div class="row" id="sideTabs" style="gap:6px;">
