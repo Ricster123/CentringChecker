@@ -96,8 +96,23 @@
   .btn:hover{ background: var(--panel2); }
   .btn:active{ transform: translateY(1px); }
   .btn:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+  .ctrlDisabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+  .snapToggle.ctrlDisabled, .edgeAgg.ctrlDisabled{ pointer-events:none; }
+  .edgeAgg input[type="range"]:disabled{ filter: grayscale(1); }
+
   .btn.primary{ border-color: transparent; background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06)); }
   .btn.accent{ border-color: rgba(255,255,255,0.0); background: linear-gradient(180deg, rgba(49,199,255,0.35), rgba(49,199,255,0.15)); }
+
+  /* Upload button nudge: green glow when no image is loaded for the current side */
+  #uploadBtn.needs-upload{
+    border-color: rgba(76,217,100,0.55);
+    box-shadow:
+      0 0 0 2px rgba(76,217,100,0.28),
+      0 0 18px rgba(76,217,100,0.28),
+      0 10px 28px rgba(0,0,0,0.18);
+    background: linear-gradient(180deg, rgba(76,217,100,0.20), rgba(76,217,100,0.08));
+  }
+
   .btn.danger{ background: linear-gradient(180deg, rgba(255,107,107,0.25), rgba(255,107,107,0.10)); border-color: rgba(255,107,107,0.25); }
   .btn.ghost{ background: transparent; box-shadow:none; }
 
@@ -551,18 +566,33 @@
         </div>
 
         <div class="metric" id="gradeMetric">
-          <div class="label">10 threshold</div><div class="val"> </div>
+          <div class="label">10 threshold (centering only)</div><div class="val"> </div>
           <div class="sub">
             <div class="gradeGrid">
               <div class="gradeRow">
-                <span class="lamp" id="psaLamp" title="Pass/fail based on measured LR + TB"></span>
-                <span class="gName">PSA / CGC</span>
-                <span class="gThresh">55/45</span>
+                <span class="lamp" id="psaLamp" title="Pass/fail based on measured LR + TB (front uses 55/45, back uses 75/25)"></span>
+                <span class="gName">PSA 10</span>
+                <span class="gThresh">Front 55/45 · Back 75/25</span>
+              </div>
+              <div class="gradeRow">
+                <span class="lamp" id="cgcLamp" title="Pass/fail based on measured LR + TB (front uses 55/45, back uses 75/25)"></span>
+                <span class="gName">CGC 10</span>
+                <span class="gThresh">Front 55/45 · Back 75/25</span>
               </div>
               <div class="gradeRow">
                 <span class="lamp" id="aceLamp" title="Pass/fail based on measured LR + TB"></span>
-                <span class="gName">ACE</span>
+                <span class="gName">ACE 10</span>
                 <span class="gThresh">60/40</span>
+              </div>
+              <div class="gradeRow">
+                <span class="lamp" id="bgsPristineLamp" title="Pass/fail based on measured LR + TB (front uses 50/50, back uses 60/40)"></span>
+                <span class="gName">BGS Pristine 10</span>
+                <span class="gThresh">Front 50/50 · Back 60/40</span>
+              </div>
+              <div class="gradeRow">
+                <span class="lamp" id="cgcPristineLamp" title="Pass/fail based on measured LR + TB (CGC Pristine 10 shown as a safe guide)"></span>
+                <span class="gName">CGC Pristine 10</span>
+                <span class="gThresh">50/50 all around (≈)</span>
               </div>
             </div>
             <div class="gradeHint" id="gradeHint">Measure Left / Right and Top / Bottom to see pass or fail.</div>
@@ -681,6 +711,8 @@
 const measureLR = document.getElementById("measureLR");
   const measureTB = document.getElementById("measureTB");
   const snapToBorderToggle = document.getElementById("snapToBorderToggle");
+  const snapToBorderWrap = document.querySelector("label.snapToggle");
+  const edgeAggWrap = document.querySelector("label.edgeAgg");
   let snapToBorderEnabled = false;
   if (snapToBorderToggle) snapToBorderToggle.addEventListener("change", ()=>{ snapToBorderEnabled = !!snapToBorderToggle.checked; _invalidateSnapCaches(); draw(); });
 
@@ -1437,28 +1469,42 @@ function snapPointToBorder(pt, axis, anchor){
 
   function syncUI(){
     const loaded = !!currentCanvas;
+
+    // Upload button guidance: glow when the current side has no image loaded
+    if (uploadBtn) uploadBtn.classList.toggle("needs-upload", !loaded);
+
     resetBtn.disabled = !loaded;
     exportBtn.disabled = !(
       (sides.front.currentCanvas && measureSides.front.lr.result && measureSides.front.tb.result) ||
       (sides.back.currentCanvas && measureSides.back.lr.result && measureSides.back.tb.result)
     );
-geomModeSel.disabled = !loaded;
-    geomApply.disabled = !loaded || !geomCapturing || ((geomMode === "rotate") ? (rotPts.length!==2) : (perspLines.length!==4 || !!perspTemp));
+
+    geomModeSel.disabled = !loaded;
+    geomApply.disabled = !loaded || !geomCapturing || ((geomMode === "rotate") ? (rotPts.length !== 2) : (perspLines.length !== 4 || !!perspTemp));
     geomCancel.disabled = !loaded || !geomCapturing;
 
+    // Measure section
     measureLR.disabled = !loaded || geomCapturing;
     measureTB.disabled = !loaded || geomCapturing;
-    const hasPersp = !!getPerspRect();
+
+    // Disable snap + edge slider until measuring is available (same rules as the measure buttons)
+    if (snapToBorderToggle) snapToBorderToggle.disabled = !loaded || geomCapturing;
+    if (edgeAggSlider) edgeAggSlider.disabled = !loaded || geomCapturing;
+
+    // Make snap + slider LOOK disabled (match button disabled styling)
+    if (snapToBorderWrap) snapToBorderWrap.classList.toggle("ctrlDisabled", !!(snapToBorderToggle && snapToBorderToggle.disabled));
+    if (edgeAggWrap) edgeAggWrap.classList.toggle("ctrlDisabled", !!(edgeAggSlider && edgeAggSlider.disabled));
+
     clearMarks.disabled = !loaded;
     clearMarksAll.disabled = !loaded;
 
     // Active section highlighting
     if (geomCard) geomCard.classList.toggle("active-geom", !!loaded && geomCapturing);
-    if (measureCard) measureCard.classList.toggle("active-measure", !!loaded && !geomCapturing && (MS().lr.pts.length<4 || MS().tb.pts.length<4));
+    if (measureCard) measureCard.classList.toggle("active-measure", !!loaded && !geomCapturing && (MS().lr.pts.length < 4 || MS().tb.pts.length < 4));
 
     // Highlight current axis
-    measureLR.style.borderColor = (activeAxis==="lr") ? "rgba(49,199,255,0.7)" : "";
-    measureTB.style.borderColor = (activeAxis==="tb") ? "rgba(49,199,255,0.7)" : "";
+    measureLR.style.borderColor = (activeAxis === "lr") ? "rgba(49,199,255,0.7)" : "";
+    measureTB.style.borderColor = (activeAxis === "tb") ? "rgba(49,199,255,0.7)" : "";
 
     if (!loaded){
       geomHint.textContent = "Load an image to begin.";
@@ -1865,11 +1911,13 @@ for (const key of ["lr","tb"]){
   }
 
   function _updateGradeLamps(lrRes, tbRes){
-    if (!psaLamp && !aceLamp && !gradeHint) return;
+    // Lamps are based on the "tightest" side (smaller of the two) for LR and TB.
+    // Thresholds are expressed as "smallest side must be >= X%".
+    const lamps = [psaLamp, cgcLamp, aceLamp, bgsPristineLamp, cgcPristineLamp].filter(Boolean);
 
-    if (!currentCanvas || !(lrRes && lrRes.ok) || !(tbRes && tbRes.ok)){
-      _setLamp(psaLamp, null);
-      _setLamp(aceLamp, null);
+    // Unknown until both axes measured
+    if (!lrRes || !tbRes || typeof lrRes.small !== "number" || typeof tbRes.small !== "number"){
+      for (const el of lamps) _setLamp(el, "");
       if (gradeHint) gradeHint.textContent = "Measure Left / Right and Top / Bottom to see pass or fail.";
       return;
     }
@@ -1877,15 +1925,39 @@ for (const key of ["lr","tb"]){
     const lrSmall = lrRes.small;
     const tbSmall = tbRes.small;
 
-    const psaOk = (lrSmall >= 45) && (tbSmall >= 45);
-    const aceOk = (lrSmall >= 40) && (tbSmall >= 40);
+    // Per-side thresholds (front vs back)
+    const isBack = (activeSide === "back");
+    const t = {
+      // PSA Gem Mint 10: 55/45 front, 75/25 back
+      psa: isBack ? 25 : 45,
+      // CGC Gem Mint 10: 55/45 front, 75/25 back (matches their published guidance)
+      cgc: isBack ? 25 : 45,
+      // ACE 10: 60/40 on both sides (as requested)
+      ace: 40,
+      // BGS Pristine 10: 50/50 front, 60/40 back
+      bgsP: isBack ? 40 : 50,
+      // CGC Pristine 10: 50/50 all around (≈, conservative guide)
+      cgcP: 50
+    };
+
+    const psaOk  = (lrSmall >= t.psa)  && (tbSmall >= t.psa);
+    const cgcOk  = (lrSmall >= t.cgc)  && (tbSmall >= t.cgc);
+    const aceOk  = (lrSmall >= t.ace)  && (tbSmall >= t.ace);
+    const bgsPOk = (lrSmall >= t.bgsP) && (tbSmall >= t.bgsP);
+    const cgcPOk = (lrSmall >= t.cgcP) && (tbSmall >= t.cgcP);
 
     _setLamp(psaLamp, psaOk ? "ok" : "bad");
+    _setLamp(cgcLamp, cgcOk ? "ok" : "bad");
     _setLamp(aceLamp, aceOk ? "ok" : "bad");
+    _setLamp(bgsPristineLamp, bgsPOk ? "ok" : "bad");
+    _setLamp(cgcPristineLamp, cgcPOk ? "ok" : "bad");
 
     if (gradeHint){
       const tightest = Math.min(lrSmall, tbSmall);
-      gradeHint.textContent = `Tightest side: ${Math.round(tightest)}% (needs ≥45% for PSA/CGC, ≥40% for ACE).`;
+      gradeHint.textContent =
+        `${activeSide.toUpperCase()} tightest side: ${Math.round(tightest)}%. ` +
+        `Needs ≥${t.psa}% (PSA), ≥${t.cgc}% (CGC), ≥${t.ace}% (ACE), ` +
+        `≥${t.bgsP}% (BGS Pristine), ≥${t.cgcP}% (CGC Pristine≈).`;
     }
   }
 
@@ -2790,6 +2862,39 @@ const leftR   = { a: rotPt(left.a),   b: rotPt(left.b)   };
       grid.appendChild(box("Left / Right", m.lr.result));
       grid.appendChild(box("Top / Bottom", m.tb.result));
       page.appendChild(grid);
+      // Grading guidance (centering only)
+      const g = d.createElement("div");
+      g.className = "meta";
+      const sideLabel = (sideKey === "back") ? "Back" : "Front";
+      const t = (sideKey === "back")
+        ? { psa:"75/25", cgc:"75/25", ace:"60/40", bgsP:"60/40", cgcP:"50/50 (≈)" }
+        : { psa:"55/45", cgc:"55/45", ace:"60/40", bgsP:"50/50", cgcP:"50/50" };
+
+      const lrSmall = m.lr.result.small;
+      const tbSmall = m.tb.result.small;
+      const tightest = Math.min(lrSmall, tbSmall);
+
+      function pass(minSmall){ return (lrSmall >= minSmall) && (tbSmall >= minSmall); }
+
+      const psaMin  = (sideKey === "back") ? 25 : 45;
+      const cgcMin  = (sideKey === "back") ? 25 : 45;
+      const aceMin  = 40;
+      const bgsPMin = (sideKey === "back") ? 40 : 50;
+      const cgcPMin = 50;
+
+      g.innerHTML =
+        `<div style="font-weight:900;margin-top:10px;">10 centring guidance (${sideLabel})</div>` +
+        `<div style="margin-top:6px;">Tightest side: <b>${Math.round(tightest)}%</b></div>` +
+        `<div style="margin-top:6px;">` +
+          `PSA 10 (${t.psa}) — <b>${pass(psaMin) ? "PASS" : "FAIL"}</b><br/>` +
+          `CGC 10 (${t.cgc}) — <b>${pass(cgcMin) ? "PASS" : "FAIL"}</b><br/>` +
+          `ACE 10 (${t.ace}) — <b>${pass(aceMin) ? "PASS" : "FAIL"}</b><br/>` +
+          `BGS Pristine 10 (${t.bgsP}) — <b>${pass(bgsPMin) ? "PASS" : "FAIL"}</b><br/>` +
+          `CGC Pristine 10 (${t.cgcP}) — <b>${pass(cgcPMin) ? "PASS" : "FAIL"}</b>` +
+        `</div>` +
+        `<div style="margin-top:10px;font-size:11px;color:#666;">Disclaimer: This aims to estimate centring as accurately as possible, but results depend on image quality and it can’t account for lens distortion, perspective warp, or bent or warped cards.</div>`;
+      page.appendChild(g);
+
 
       return page;
     }
