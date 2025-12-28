@@ -526,9 +526,12 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <div class="brand">  <span class="logo">
+    <div class="brand">
+  <span class="logo">
     <img src="logo.png" alt="Is It Centered logo">
-  </span> Is It Centered</div>
+  </span>
+  Is It Centered
+</div>
     <div class="top-actions">
 
       <div class="row" id="sideTabs" style="gap:6px;">
@@ -580,18 +583,9 @@
             <div class="row">
               <button class="btn primary" id="measureLR" disabled>Left / Right</button>
               <button class="btn primary" id="measureTB" disabled>Top / Bottom</button>
-              <label class="snapToggle" title="When measuring, clicks will snap to the nearest strong border edge">
-                <input type="checkbox" id="snapToBorderToggle">
-                <span>Snap to border</span>
-              </label>
-
-              <label class="edgeAgg" id="edgeAggWrap" title="Adjust how aggressively the tool detects edges (inner borders often need higher values)">
-                <span>Edge detect</span>
-                <input type="range" id="edgeAggSlider" min="50" max="250" value="120" step="5">
-                <span class="mono" id="edgeAggVal">1.20×</span>
-              </label>
-
-<button class="btn danger" id="clearMarks" disabled>Clear selected</button>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button class="btn danger" id="clearMarks" disabled>Clear selected</button>
               <button class="btn" id="clearMarksAll" disabled>Clear all</button>
             </div>
             <div class="hint">
@@ -756,6 +750,7 @@
 </div>
   </div>
 </div>
+
 
 <script src="app.js"></script>
 </body>
