@@ -453,7 +453,54 @@
   .edgeAgg input[type="range"]{
     width:140px;
   }
+  .edgeAgg select{
+    width:auto;
+    padding:6px 10px;
+    border-radius:10px;
+    font-weight:800;
+  }
+
+  .edgeAgg.mode{
+    flex-direction:column;
+    align-items:stretch;
+    gap:6px;
+  }
+  .edgeAgg.mode span{ white-space:nowrap; }
+
+  .measureModeToggle{
+    display:flex;
+    width:100%;
+    border:1px solid var(--border);
+    border-radius:12px;
+    overflow:hidden;
+    background: rgba(0,0,0,0.10);
+  }
+  .measureModeToggle .mmBtn{
+    flex:1 1 0%;
+    padding:8px 10px;
+    border:0;
+    background: transparent;
+    color: rgba(255,255,255,0.82);
+    font-weight:800;
+    cursor:pointer;
+    min-width:0;
+  }
+  .measureModeToggle .mmBtn + .mmBtn{
+    border-left:1px solid rgba(255,255,255,0.10);
+  }
+  .measureModeToggle .mmBtn.active{
+    background: linear-gradient(180deg, rgba(49,199,255,0.35), rgba(49,199,255,0.15));
+    color: rgba(255,255,255,0.95);
+  }
+  .measureModeToggle .mmBtn:disabled{
+    cursor:not-allowed;
+  }
+  .measureModeToggle .mmBtn:focus-visible{
+    outline:2px solid rgba(49,199,255,0.55);
+    outline-offset:-2px;
+  }
   .edgeAgg .mono{
+
     font-variant-numeric: tabular-nums;
     min-width:54px;
     text-align:right;
@@ -462,7 +509,7 @@
     .snapToggle input{ accent-color: var(--accent); }
     .snapToggle span{ white-space:nowrap; }
 
-  .logo{
+      .logo{
   height:40px;
   display:inline-flex;
   align-items:center;
@@ -479,12 +526,9 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <div class="brand">
-  <span class="logo">
+    <div class="brand">  <span class="logo">
     <img src="logo.png" alt="Is It Centered logo">
-  </span>
-  Is It Centered
-</div>
+  </span> Is It Centered</div>
     <div class="top-actions">
 
       <div class="row" id="sideTabs" style="gap:6px;">
@@ -541,7 +585,7 @@
                 <span>Snap to border</span>
               </label>
 
-              <label class="edgeAgg" title="Adjust how aggressively the tool detects edges (inner borders often need higher values)">
+              <label class="edgeAgg" id="edgeAggWrap" title="Adjust how aggressively the tool detects edges (inner borders often need higher values)">
                 <span>Edge detect</span>
                 <input type="range" id="edgeAggSlider" min="50" max="250" value="120" step="5">
                 <span class="mono" id="edgeAggVal">1.20×</span>
@@ -554,6 +598,17 @@
               LR: L1 outer, L2 inner, R1 inner, R2 outer.<br/>
               TB: T1 outer, T2 inner, B1 inner, B2 outer.
             </div>
+
+            <div class="row" style="margin-top:8px;">
+              <label class="edgeAgg mode" id="measureModeWrap" title="Pixel count is consistent and matches what you see. Advanced uses subpixel values and is more sensitive to tiny click differences.">
+                <span>Measurement mode</span>
+                <div class="measureModeToggle" role="group" aria-label="Measurement mode">
+                  <button type="button" class="mmBtn" id="measureModePixel" data-mode="pixel" aria-pressed="true">Pixels</button>
+                  <button type="button" class="mmBtn" id="measureModeRaw" data-mode="raw" aria-pressed="false">Raw</button>
+                </div>
+              </label>
+            </div>
+            <div class="hint" id="measureModeHint"></div>
           </div>
         </div>
 
