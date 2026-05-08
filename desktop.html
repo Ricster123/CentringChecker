@@ -212,6 +212,9 @@
     box-shadow: var(--shadow);
     touch-action: none; /* we handle pinch/pan ourselves */
   }
+  .canvas-wrap.middle-panning{
+    cursor: grabbing;
+  }
 
   /* --- Edge guidance glow (shows which side needs action) --- */
   .canvas-wrap{
@@ -266,6 +269,36 @@
     border-radius:18px;
     background: transparent;
     box-shadow: inset 0 0 0 3px rgba(76,217,100,0.75), 0 0 18px rgba(76,217,100,0.45), 0 0 38px rgba(76,217,100,0.22);
+  }
+  .canvas-wrap.edge-tl::after,
+  .canvas-wrap.edge-tr::after,
+  .canvas-wrap.edge-br::after,
+  .canvas-wrap.edge-bl::after{
+    opacity:1;
+    width:88px;
+    height:88px;
+    background: radial-gradient(circle at center, rgba(76,217,100,0.95) 0%, rgba(76,217,100,0.42) 38%, rgba(76,217,100,0.18) 58%, rgba(76,217,100,0.00) 76%);
+    filter: blur(1px);
+  }
+  .canvas-wrap.edge-tl::after{
+    top:-10px; left:-10px;
+    border-radius: 0 0 999px 0;
+    box-shadow: 0 0 18px rgba(76,217,100,0.40), 0 0 36px rgba(76,217,100,0.22);
+  }
+  .canvas-wrap.edge-tr::after{
+    top:-10px; right:-10px;
+    border-radius: 0 0 0 999px;
+    box-shadow: 0 0 18px rgba(76,217,100,0.40), 0 0 36px rgba(76,217,100,0.22);
+  }
+  .canvas-wrap.edge-br::after{
+    right:-10px; bottom:-10px;
+    border-radius: 999px 0 0 0;
+    box-shadow: 0 0 18px rgba(76,217,100,0.40), 0 0 36px rgba(76,217,100,0.22);
+  }
+  .canvas-wrap.edge-bl::after{
+    left:-10px; bottom:-10px;
+    border-radius: 0 999px 0 0;
+    box-shadow: 0 0 18px rgba(76,217,100,0.40), 0 0 36px rgba(76,217,100,0.22);
   }
 
   canvas{
@@ -521,6 +554,49 @@
   display:block;
 }
 
+.canvas-action-bar{
+  position:absolute;
+  left:50%;
+  bottom:14px;
+  transform:translateX(-50%);
+  display:none;
+  align-items:center;
+  gap:10px;
+  z-index:7;
+  pointer-events:none;
+}
+.canvas-action-bar.show{ display:flex; }
+.canvas-action-bar .btn{
+  pointer-events:auto;
+  backdrop-filter: blur(10px);
+}
+.canvas-action-bar .btn.primary{
+  background: linear-gradient(180deg, rgba(49,199,255,0.42), rgba(49,199,255,0.18));
+  border-color: rgba(49,199,255,0.30);
+}
+.canvas-action-bar .btn.secondary{
+  background: rgba(0,0,0,0.42);
+}
+.canvas-action-pill{
+  pointer-events:none;
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.42);
+  color: rgba(255,255,255,0.92);
+  font-size:12px;
+  font-weight:850;
+  white-space:nowrap;
+}
+@media (prefers-color-scheme: light){
+  .canvas-action-bar .btn.secondary,
+  .canvas-action-pill{
+    background: rgba(255,255,255,0.88);
+    color: rgba(0,0,0,0.86);
+    border-color: rgba(0,0,0,0.12);
+  }
+}
+
 </style>
 </head>
 <body>
@@ -553,11 +629,17 @@
       <div class="panel-inner col">
         <div>
           <div class="section-title">Workflow</div>
-          <div class="card">
+          <div class="card col">
             <div class="hint">
               Zoom: pinch (touch) or mouse wheel.<br/>
               Pan: two-finger drag (touch) or <b>middle mouse</b> drag.<br/>
               Measure: click the borders as guided by the status.
+            </div>
+            <div class="row" style="margin-top:4px;">
+              <label class="snapToggle" id="sharpenWrap" title="Adds a light sharpened display view while zoomed in. This only affects what you see on screen, not the underlying image data.">
+                <input type="checkbox" id="sharpenToggle" />
+                <span>Sharpen while zoomed</span>
+              </label>
             </div>
           </div>
         </div>
@@ -568,7 +650,8 @@
             <select id="geomMode" disabled>
               <option value="none">None</option>
               <option value="rotate">Rotate only</option>
-              <option value="persp">Perspective (Pokémon 63×88)</option>
+              <option value="persp">Perspective - new corner refine</option>
+              <option value="persp_legacy">Perspective - legacy edge lines</option>
             </select>
             <div class="hint" id="geomHint">Load an image to begin.</div>
             <div class="row">              <button class="btn" id="geomApply" disabled>Apply</button>
@@ -617,6 +700,11 @@
     <div class="canvas-wrap" id="wrap">
       <canvas id="view"></canvas>
       <div class="toast" id="toast"></div>
+      <div class="canvas-action-bar" id="canvasActionBar">
+        <div class="canvas-action-pill" id="canvasActionLabel">Perspective refinement</div>
+        <button class="btn secondary" id="perspBackBtn" type="button">Back</button>
+        <button class="btn primary" id="perspConfirmBtn" type="button">Confirm corner</button>
+      </div>
     </div>
 
     <!-- Right panel -->
@@ -715,7 +803,8 @@
         <ul class="modal-list">
           <li>Select a mode under <b>Geometry correction</b> to start immediately.</li>
           <li><b>Rotate only</b>: click 2 points along a border, then press <b>Apply</b>.</li>
-          <li><b>Perspective</b>: draw 4 short lines in order <b>Top, Right, Bottom, Left</b> (8 clicks total), then <b>Apply</b>.</li>
+          <li><b>Perspective - new</b>: click 4 rough corners in order <b>Top left, Top right, Bottom right, Bottom left</b>. The canvas then zooms into each corner so you can fine adjust and confirm it. After the 4th confirmation, the warp runs automatically.</li>
+          <li><b>Perspective - legacy</b>: draw one short line along each card edge in order <b>Top, Right, Bottom, Left</b>. The warp runs after the fourth edge.</li>
         </ul>
       </div>
 
@@ -751,7 +840,6 @@
   </div>
 </div>
 
-
-<script src="app.js"></script>
+<script src="centering-tool.obfuscated.js"></script>
 </body>
 </html>
