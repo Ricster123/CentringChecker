@@ -282,7 +282,8 @@
   }
 
   .step-chip,
-  .zoom-pill{
+  .zoom-pill,
+  .support-pill{
     display:inline-flex;
     align-items:center;
     justify-content:center;
@@ -295,6 +296,14 @@
     font-size:12px;
     font-weight:900;
     white-space:nowrap;
+  }
+
+  .support-pill{
+    text-decoration:none;
+    color:var(--text);
+    background:rgba(255,202,85,0.14);
+    border-color:rgba(255,202,85,0.34);
+    flex:0 0 auto;
   }
 
   .step-title{
@@ -479,6 +488,7 @@
   <section class="dock" id="dock" aria-live="polite">
     <div class="dock-top">
       <span class="step-chip" id="stepChip">Start</span>
+      <a class="support-pill" href="https://buymeacoffee.com/redherring99" target="_blank" rel="noopener noreferrer" aria-label="Support this tool with Buy Me a Coffee">Support Me</a>
       <span class="zoom-pill" id="zoomPill">100%</span>
     </div>
     <h1 class="step-title" id="stepTitle">Load a photo</h1>

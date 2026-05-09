@@ -94,6 +94,12 @@
     transition: transform .06s ease, background .15s ease;
     box-shadow: 0 10px 28px rgba(0,0,0,0.18);
   }
+  a.btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    text-decoration:none;
+  }
   .btn:hover{ background: var(--panel2); }
   .btn:active{ transform: translateY(1px); }
   .btn:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
@@ -116,6 +122,12 @@
 
   .btn.danger{ background: linear-gradient(180deg, rgba(255,107,107,0.25), rgba(255,107,107,0.10)); border-color: rgba(255,107,107,0.25); }
   .btn.ghost{ background: transparent; box-shadow:none; }
+  .btn.support{
+    background: linear-gradient(180deg, rgba(255,206,92,0.24), rgba(255,206,92,0.09));
+    border-color: rgba(255,206,92,0.28);
+    color: var(--text);
+    font-size:13.3333px;
+  }
 
   .content{
     display:grid;
@@ -617,6 +629,7 @@
 
       <span class="pill" id="zoomPill">100%</span>
       <button class="btn" id="helpBtn" title="User guide">Help</button>
+      <a class="btn support" href="https://buymeacoffee.com/redherring99" target="_blank" rel="noopener noreferrer" title="Support this tool">Support Me</a>
       <button class="btn" id="uploadBtn">Upload</button>
       <button class="btn" id="resetBtn" disabled>Reset</button>
       <button class="btn accent" id="exportBtn" disabled>Export PDF</button>
@@ -636,9 +649,9 @@
               Measure: click the borders as guided by the status.
             </div>
             <div class="row" style="margin-top:4px;">
-              <label class="snapToggle" id="sharpenWrap" title="Adds a light sharpened display view while zoomed in. This only affects what you see on screen, not the underlying image data.">
+              <label class="snapToggle" id="sharpenWrap" title="Adds a sharpened display view at any zoom. This only affects what you see on screen, not the underlying image data.">
                 <input type="checkbox" id="sharpenToggle" />
-                <span>Sharpen while zoomed</span>
+                <span>Sharpen view</span>
               </label>
             </div>
           </div>
