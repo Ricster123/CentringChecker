@@ -544,6 +544,22 @@
     outline:2px solid rgba(49,199,255,0.55);
     outline-offset:-2px;
   }
+  .measureOption{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    width:100%;
+  }
+  .measureOption .hint{
+    margin:0 2px;
+    line-height:1.35;
+  }
+  .threeSidedOptions{ display:none; }
+  .threeSidedOptions.show{ display:flex; width:100%; }
+  .threeSidedOptions .edgeAgg.mode{
+    width:100%;
+    box-sizing:border-box;
+  }
   .edgeAgg .mono{
 
     font-variant-numeric: tabular-nums;
@@ -689,16 +705,32 @@
               TB: T1 outer, T2 inner, B1 inner, B2 outer.
             </div>
 
-            <div class="row" style="margin-top:8px;">
-              <label class="edgeAgg mode" id="measureModeWrap" title="Pixel count is consistent and matches what you see. Advanced uses subpixel values and is more sensitive to tiny click differences.">
+            <div class="measureOption" style="margin-top:8px;">
+              <label class="edgeAgg mode" id="measureModeWrap" title="Pixels use selected pixel cells. Raw uses exact click positions with subpixel precision.">
                 <span>Measurement mode</span>
                 <div class="measureModeToggle" role="group" aria-label="Measurement mode">
                   <button type="button" class="mmBtn" id="measureModePixel" data-mode="pixel" aria-pressed="true">Pixels</button>
                   <button type="button" class="mmBtn" id="measureModeRaw" data-mode="raw" aria-pressed="false">Raw</button>
                 </div>
               </label>
+              <div class="hint" id="measureModeHint"></div>
             </div>
-            <div class="hint" id="measureModeHint"></div>
+            <div class="measureOption" style="margin-top:8px;">
+              <label class="snapToggle" id="threeSidedWrap" title="Estimate Top / Bottom from a full Left / Right measure plus one visible Top / Bottom border.">
+                <input type="checkbox" id="threeSidedToggle" />
+                <span>3-sided TB estimate</span>
+              </label>
+              <div class="hint" id="threeSidedHint"></div>
+            </div>
+            <div class="row threeSidedOptions" id="threeSidedOptions" style="margin-top:8px;">
+              <label class="edgeAgg mode" id="threeSidedSideWrap" title="Choose which Top / Bottom border is visible enough to measure.">
+                <span>Visible TB border</span>
+                <div class="measureModeToggle" role="group" aria-label="Visible Top / Bottom border">
+                  <button type="button" class="mmBtn" id="threeSidedTop" data-side="top" aria-pressed="false">Top</button>
+                  <button type="button" class="mmBtn" id="threeSidedBottom" data-side="bottom" aria-pressed="true">Bottom</button>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -831,6 +863,7 @@
               <li>TB: T1 outer, T2 inner, B1 inner, B2 outer</li>
             </ul>
           </li>
+          <li>Use <b>3-sided TB estimate</b> when only one Top / Bottom border is clear: measure LR fully, choose the visible TB side, then place the two TB points on that border.</li>
           <li>Tips: zoom in so you can place clicks precisely on the border edges.</li>
         </ul>
       </div>
